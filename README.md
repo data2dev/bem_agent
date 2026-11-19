@@ -26,7 +26,7 @@ Every run passes through validation before and after the simulation, so the agen
 ## Architecture
 
 ```
-LLM (Claude via API, or any MCP client)
+LLM (Groq gpt-oss-120b by default, or any MCP client)
         │  tool calls
         ▼
 MCP server (bem_agent)
@@ -43,7 +43,7 @@ EnergyPlus  +  results.db (SQLite)
 
 | Area | What's included |
 |---|---|
-| Agent and connector | MCP server exposing simulation tools; a CLI agent loop using the Anthropic API with tool calling |
+| Agent and connector | MCP server exposing simulation tools; a model-agnostic CLI agent loop (Groq by default) with tool calling |
 | Simulation | Geometry, schedules, thermal loads, autosized equipment, parametric batches |
 | Verification and validation | Pre-run input validation, post-run sanity checks, a reference-case regression test |
 | Data | ETL from EnergyPlus SQLite output into a results database; SQL queries across runs; hourly time-series aggregation and plots |
@@ -56,7 +56,7 @@ EnergyPlus  +  results.db (SQLite)
 ```bash
 # Run everything in Docker (EnergyPlus included)
 docker build -t bem_agent .
-docker run -it -e ANTHROPIC_API_KEY=... bem_agent "Size HVAC for a 2-story office in Chicago"
+docker run -it -e GROQ_API_KEY=... bem_agent "Size HVAC for a 2-story office in Chicago"
 
 # Or connect the MCP server to an MCP client such as Claude Desktop
 python -m bem_agent.server
@@ -64,12 +64,12 @@ python -m bem_agent.server
 
 You'll need one of:
 
-- an **Anthropic API key**, to run the built-in agent loop, or
+- a free **Groq API key**, to run the built-in agent loop, or
 - an **MCP-capable app** (e.g. Claude Desktop), to call the tools directly.
 
 ## Tech stack
 
-Python · EnergyPlus · MCP · Anthropic API (tool use) · SQLite / SQL · pandas · Docker · GitHub Actions
+Python · EnergyPlus · MCP · Groq (OpenAI-compatible tool calling) · GCP Cloud Run · SQLite / SQL · pandas · Docker · GitHub Actions
 
 ## License
 
