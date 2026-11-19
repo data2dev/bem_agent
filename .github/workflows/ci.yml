@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ENERGYPLUS_TAG: v25.1.0
+  ENERGYPLUS_ASSET_PATTERN: "*Linux-Ubuntu22.04-x86_64.tar.gz"
+
+jobs:
+  lint-and-test:
+    name: Lint and unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Ruff (format check)
+        run: ruff format --check .
+
+      - name: Unit tests
+        run: pytest -m "not energyplus" -v
+
+  energyplus:
+    name: EnergyPlus simulation tests
+    runs-on: ubuntu-22.04
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Restore EnergyPlus cache
+        id: eplus-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/energyplus
+          key: energyplus-${{ env.ENERGYPLUS_TAG }}-ubuntu22.04
+
+      - name: Download EnergyPlus
+        if: steps.eplus-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ~/energyplus /tmp/eplus-dl
+          gh release download "$ENERGYPLUS_TAG" -R NREL/EnergyPlus \
+            -p "$ENERGYPLUS_ASSET_PATTERN" -D /tmp/eplus-dl
+          tar -xzf /tmp/eplus-dl/*.tar.gz -C ~/energyplus --strip-components=1
+
+      - name: Add EnergyPlus to PATH
+        run: |
+          echo "ENERGYPLUS_DIR=$HOME/energyplus" >> "$GITHUB_ENV"
+          echo "$HOME/energyplus" >> "$GITHUB_PATH"
+
+      - name: EnergyPlus version
+        run: energyplus --version
+
+      - name: Smoke test (bundled example model)
+        run: bash scripts/eplus_smoke_test.sh
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Simulation and regression tests
+        run: pytest -m energyplus -v
+
+      - name: Upload simulation outputs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: energyplus-outputs
+          path: |
+            /tmp/eplus-smoke/
+            **/eplusout.err
+          if-no-files-found: ignore

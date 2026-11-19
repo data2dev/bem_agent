@@ -7,10 +7,14 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 _Last updated: 2026-11-18_
 
 - **Phase:** 0, project setup
-- **Done:** repo created, README and roadmap drafted (branch `feat/scaffold-docs`)
-- **Next:** confirm how EnergyPlus gets installed for local dev and CI, then scaffold the Python package
-- **Blockers / open questions:**
-  - EnergyPlus binaries can't be downloaded inside Claude's sandbox (GitHub release downloads are blocked there). Options: install it through Docker / CI only, or find a pip-installable build. To decide in Phase 0.
+- **Done:** README, roadmap, minimal package skeleton, CI pipeline (GitHub Actions) on branch `feat/scaffold-docs`
+- **Next:** check whether Docker runs on your PC; then start Phase 1 (model builder)
+- **Where simulations run:**
+  - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR. This is the main place real simulations get checked.
+  - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
+  - **Your machine:** Docker if your PC can handle it; otherwise a small GCP VM (or Cloud Run job) running the same Docker image.
+- **Open questions:**
+  - Is Docker installed and usable on your PC? (Check with `docker --version` and `docker run hello-world`.)
   - Running the agent loop end to end needs an Anthropic API key (yours, set locally; never committed).
 
 ## Why this project
@@ -36,9 +40,12 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 ### Phase 0: Setup
 - [x] Create repo
 - [x] README and ROADMAP
-- [ ] Decide the EnergyPlus install path (Docker image vs. pip build) and pin a version
-- [ ] Python package skeleton (`src/bem_agent/`), `pyproject.toml`, linting, pytest
-- [ ] `.gitignore`, `.env.example` (for `ANTHROPIC_API_KEY`), license
+- [x] Pin EnergyPlus version (25.1.0) and install it in CI
+- [x] Python package skeleton (`src/bem_agent/`), `pyproject.toml`, ruff, pytest
+- [x] CI: GitHub Actions running lint, unit tests, and an EnergyPlus smoke test + simulation tests
+- [x] `.gitignore`
+- [ ] `.env.example` (for `ANTHROPIC_API_KEY`), license
+- [ ] Check Docker on your PC; if it's too slow, plan a GCP VM / Cloud Run setup
 
 ### Phase 1: Model builder
 - [ ] Parametric geometry: footprint, floors, floor-to-floor height, window-to-wall ratio, orientation
@@ -73,7 +80,8 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 
 ### Phase 6: Packaging and CI
 - [ ] Dockerfile: EnergyPlus + `bem_agent`
-- [ ] GitHub Actions: lint, unit tests, regression case inside the Docker image
+- [ ] CI: build the Docker image and run the regression case inside it
+- [ ] CD: on merge to `main`, push the image to a registry (GHCR, or GCP Artifact Registry if we run on GCP)
 - [ ] README quick start verified from a clean clone
 
 ### Phase 7: Polish for the demo
@@ -87,3 +95,5 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 |---|---|
 | 2026-11-18 | Repo name `bem_agent`. Scope = all core items; stretch items (Mongo, Flask) and skips (React, cloud deploy) are out. |
 | 2026-11-18 | Claude builds on feature branches; you merge to `main`. |
+| 2026-11-18 | EnergyPlus 25.1.0, installed in CI from the official release. CI is the main place real simulations run. |
+| 2026-11-18 | Local runs via Docker if your PC can handle it; GCP as the fallback. |
