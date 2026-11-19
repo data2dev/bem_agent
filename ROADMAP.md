@@ -8,13 +8,12 @@ _Last updated: 2026-11-18_
 
 - **Phase:** 0, project setup
 - **Done:** README, roadmap, minimal package skeleton, CI pipeline (GitHub Actions) on branch `feat/scaffold-docs`
-- **Next:** check whether Docker runs on your PC; then start Phase 1 (model builder)
+- **Next:** Phase 1 (model builder)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR. This is the main place real simulations get checked.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
-  - **Your machine:** Docker if your PC can handle it; otherwise a small GCP VM (or Cloud Run job) running the same Docker image.
+  - **Your machine:** Docker (28.2.2, confirmed working). GCP stays the fallback for big parametric batches.
 - **Open questions:**
-  - Is Docker installed and usable on your PC? (Check with `docker --version` and `docker run hello-world`.)
   - Running the agent loop end to end needs an Anthropic API key (yours, set locally; never committed).
 
 ## Why this project
@@ -45,7 +44,7 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 - [x] CI: GitHub Actions running lint, unit tests, and an EnergyPlus smoke test + simulation tests
 - [x] `.gitignore`
 - [ ] `.env.example` (for `ANTHROPIC_API_KEY`), license
-- [ ] Check Docker on your PC; if it's too slow, plan a GCP VM / Cloud Run setup
+- [x] Check Docker on your PC (works)
 
 ### Phase 1: Model builder
 - [ ] Parametric geometry: footprint, floors, floor-to-floor height, window-to-wall ratio, orientation
@@ -96,4 +95,4 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 | 2026-11-18 | Repo name `bem_agent`. Scope = all core items; stretch items (Mongo, Flask) and skips (React, cloud deploy) are out. |
 | 2026-11-18 | Claude builds on feature branches; you merge to `main`. |
 | 2026-11-18 | EnergyPlus 25.1.0, installed in CI from the official release. CI is the main place real simulations run. |
-| 2026-11-18 | Local runs via Docker if your PC can handle it; GCP as the fallback. |
+| 2026-11-18 | Local runs via Docker (confirmed working); GCP only if batches get too slow. |
