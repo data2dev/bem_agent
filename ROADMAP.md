@@ -8,13 +8,14 @@ _Last updated: 2026-11-18_
 
 - **Phase:** 0, project setup
 - **Done:** README, roadmap, minimal package skeleton, CI pipeline (GitHub Actions) on branch `feat/scaffold-docs`
-- **Next:** Phase 1 (model builder)
+- **Next:** create the dedicated GCP project and run the setup commands; then start Phase 1 (model builder)
 - **Where simulations run:**
-  - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR. This is the main place real simulations get checked.
+  - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
-  - **Your machine:** Docker (28.2.2, confirmed working). GCP stays the fallback for big parametric batches.
+  - **GCP (Cloud Run):** the deployed demo. Your local PC is not used, even though Docker works on it.
 - **Open questions:**
-  - Running the agent loop end to end needs an Anthropic API key (yours, set locally; never committed).
+  - Dedicated GCP project ID and region.
+  - Gemini API key, created inside that project (goes into Secret Manager, never into the repo or chat).
 
 ## Why this project
 
@@ -22,11 +23,22 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 
 ## Scope
 
-**In:** MCP connector, CLI agent loop (Anthropic API), geometry, schedules, loads, equipment sizing, parametric runs, V&V, ETL into SQLite, SQL across runs, hourly time-series and plots, Docker, GitHub repo with CI.
+**In:** MCP connector, model-agnostic CLI agent loop (Gemini by default), geometry, schedules, loads, equipment sizing, parametric runs, V&V, ETL into SQLite, SQL across runs, hourly time-series and plots, Docker, GitHub repo with CI.
 
-**Out (decided):** MongoDB / NoSQL run log, Flask API, React / Next.js frontend, Azure / GCP deployment.
+**Out (decided):** MongoDB / NoSQL run log, Flask API, React / Next.js frontend, Azure deployment.
 
 **Naming:** no "Trane" or "TRACE" anywhere in the repo. Both are trademarks; the repo should not read as company work.
+
+## Safety guardrails (GCP and LLM)
+
+Context: an AI tool once changed an unrelated GCP project. These rules keep `bem_agent` fully isolated.
+
+1. **Dedicated GCP project** for `bem_agent` only. No resources shared with other projects.
+2. **LLM access by API key only**, created inside the dedicated project and restricted to the Gemini API. No AI Studio app or agent features touch GCP.
+3. **The agent can call only our simulation tools.** No shell, no `gcloud`, no arbitrary file access; all file paths confined to the runs directory and validated.
+4. **Least-privilege service accounts:** the Cloud Run runtime account gets access to its own bucket only; the GitHub deploy account (Workload Identity Federation, no key files, limited to this repo) can only push images and update this service.
+5. **Budget alert** on the project.
+6. **Every `gcloud` command names `--project` explicitly**; the user reviews and runs them; Claude has no GCP access.
 
 ## Workflow
 
@@ -44,7 +56,8 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 - [x] CI: GitHub Actions running lint, unit tests, and an EnergyPlus smoke test + simulation tests
 - [x] `.gitignore`
 - [ ] `.env.example` (for `ANTHROPIC_API_KEY`), license
-- [x] Check Docker on your PC (works)
+- [x] Check Docker on your PC (works, but we won't use the local PC)
+- [ ] Create dedicated GCP project, budget alert, Artifact Registry, GCS bucket, Secret Manager, Workload Identity Federation for GitHub
 
 ### Phase 1: Model builder
 - [ ] Parametric geometry: footprint, floors, floor-to-floor height, window-to-wall ratio, orientation
@@ -74,13 +87,13 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 ### Phase 5: MCP server and agent
 - [ ] MCP server exposing tools: `create_building`, `set_schedules`, `set_hvac_system`, `run_simulation`, `run_parametric`, `get_loads`, `get_equipment_sizes`, `query_results`, `plot_timeseries`
 - [ ] Clear tool descriptions and error messages the LLM can recover from
-- [ ] CLI agent loop using the Anthropic API with tool calling
+- [ ] Model-agnostic CLI agent loop with tool calling (Gemini default; Groq and Claude supported)
 - [ ] Example prompts and a recorded end-to-end transcript for the README
 
 ### Phase 6: Packaging and CI
 - [ ] Dockerfile: EnergyPlus + `bem_agent`
 - [ ] CI: build the Docker image and run the regression case inside it
-- [ ] CD: on merge to `main`, push the image to a registry (GHCR, or GCP Artifact Registry if we run on GCP)
+- [ ] CD: on merge to `main`, push the image to GCP Artifact Registry and deploy to Cloud Run
 - [ ] README quick start verified from a clean clone
 
 ### Phase 7: Polish for the demo
@@ -95,4 +108,6 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 | 2026-11-18 | Repo name `bem_agent`. Scope = all core items; stretch items (Mongo, Flask) and skips (React, cloud deploy) are out. |
 | 2026-11-18 | Claude builds on feature branches; you merge to `main`. |
 | 2026-11-18 | EnergyPlus 25.1.0, installed in CI from the official release. CI is the main place real simulations run. |
-| 2026-11-18 | Local runs via Docker (confirmed working); GCP only if batches get too slow. |
+| 2026-11-18 | No local PC: everything runs on GCP (Cloud Run service for the MCP server, Cloud Run jobs for batches, GCS for outputs). |
+| 2026-11-18 | LLM: model-agnostic agent loop. Default Gemini Flash (AI Studio free tier), Groq as fallback, Claude optional (API or claude.ai connector). |
+| 2026-11-18 | Safety guardrails adopted (see section above): dedicated GCP project, restricted API key, tool-only agent, least-privilege accounts. |
