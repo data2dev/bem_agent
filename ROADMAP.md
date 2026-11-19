@@ -14,8 +14,8 @@ _Last updated: 2026-11-18_
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
   - **GCP (Cloud Run):** the deployed demo. Your local PC is not used, even though Docker works on it.
 - **Open questions:**
-  - Dedicated GCP project ID and region.
-  - Gemini API key, created inside that project (goes into Secret Manager, never into the repo or chat).
+  - Project IDs for `bem-agent-demo` (billing on) and `bem-agent-llm` (billing off), and a region.
+  - Gemini API key, created in `bem-agent-llm` (goes into Secret Manager, never into the repo or chat).
 
 ## Why this project
 
@@ -33,8 +33,10 @@ A portfolio demo for an LLM-agents + building energy modeling role. It covers ea
 
 Context: an AI tool once changed an unrelated GCP project. These rules keep `bem_agent` fully isolated.
 
-1. **Dedicated GCP project** for `bem_agent` only. No resources shared with other projects.
-2. **LLM access by API key only**, created inside the dedicated project and restricted to the Gemini API. No AI Studio app or agent features touch GCP.
+1. **Two dedicated GCP projects**, separate from all other work:
+   - `bem-agent-demo` (billing on, budget alert): Cloud Run, GCS bucket, Artifact Registry, Secret Manager.
+   - `bem-agent-llm` (**billing off**): holds only the Gemini API key. Keeping billing off keeps it on the AI Studio free tier (projects with billing are charged per token), and it has no resources to change.
+2. **LLM access by API key only** (Gemini Developer API, not Vertex AI), restricted to the Gemini API and stored in Secret Manager in `bem-agent-demo`. No AI Studio app or agent features touch GCP.
 3. **The agent can call only our simulation tools.** No shell, no `gcloud`, no arbitrary file access; all file paths confined to the runs directory and validated.
 4. **Least-privilege service accounts:** the Cloud Run runtime account gets access to its own bucket only; the GitHub deploy account (Workload Identity Federation, no key files, limited to this repo) can only push images and update this service.
 5. **Budget alert** on the project.
@@ -57,7 +59,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] `.gitignore`
 - [ ] `.env.example` (for `ANTHROPIC_API_KEY`), license
 - [x] Check Docker on your PC (works, but we won't use the local PC)
-- [ ] Create dedicated GCP project, budget alert, Artifact Registry, GCS bucket, Secret Manager, Workload Identity Federation for GitHub
+- [ ] Create `bem-agent-llm` (no billing) + Gemini key; create `bem-agent-demo` with budget alert, Artifact Registry, GCS bucket, Secret Manager, Workload Identity Federation for GitHub
 
 ### Phase 1: Model builder
 - [ ] Parametric geometry: footprint, floors, floor-to-floor height, window-to-wall ratio, orientation
@@ -111,3 +113,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-18 | No local PC: everything runs on GCP (Cloud Run service for the MCP server, Cloud Run jobs for batches, GCS for outputs). |
 | 2026-11-18 | LLM: model-agnostic agent loop. Default Gemini Flash (AI Studio free tier), Groq as fallback, Claude optional (API or claude.ai connector). |
 | 2026-11-18 | Safety guardrails adopted (see section above): dedicated GCP project, restricted API key, tool-only agent, least-privilege accounts. |
+| 2026-11-18 | Split into two projects: the Gemini key lives in a billing-free project so it stays on the free tier (billing-enabled projects and Vertex AI are paid). |
