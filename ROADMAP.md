@@ -57,7 +57,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Python package skeleton (`src/bem_agent/`), `pyproject.toml`, ruff, pytest
 - [x] CI: GitHub Actions running lint, unit tests, and an EnergyPlus smoke test + simulation tests
 - [x] `.gitignore`
-- [ ] `.env.example` (for `ANTHROPIC_API_KEY`), license
+- [ ] `.env.example` (for `GROQ_API_KEY`), license
 - [x] Check Docker on your PC (works, but we won't use the local PC)
 - [ ] Create `bem-agent-llm` (no billing) + Gemini key; create `bem-agent-demo` with budget alert, Artifact Registry, GCS bucket, Secret Manager, Workload Identity Federation for GitHub
 
