@@ -67,6 +67,20 @@ You'll need one of:
 - a free **Groq API key**, to run the built-in agent loop, or
 - an **MCP-capable app** (e.g. Claude Desktop), to call the tools directly.
 
+## Choosing the LLM
+
+The agent is model-agnostic. One setting picks the provider; agent code never changes.
+
+| `BEM_LLM_PROVIDER` | Default model | API key variable |
+|---|---|---|
+| `groq` (default, free tier) | `openai/gpt-oss-120b` | `GROQ_API_KEY` |
+| `anthropic` | `claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
+| `gemini` | `gemini-3.5-flash` | `GEMINI_API_KEY` |
+| `openai` | set `BEM_LLM_MODEL` | `OPENAI_API_KEY` |
+| `openai_compatible` (OpenRouter, vLLM, Ollama, ...) | set `BEM_LLM_MODEL` | `BEM_LLM_API_KEY` + `BEM_LLM_BASE_URL` |
+
+Override the model with `BEM_LLM_MODEL`, e.g. `BEM_LLM_PROVIDER=anthropic BEM_LLM_MODEL=claude-opus-5-5`. See [`.env.example`](.env.example).
+
 ## Tech stack
 
 Python · EnergyPlus · MCP · Groq (OpenAI-compatible tool calling) · GCP Cloud Run · SQLite / SQL · pandas · Docker · GitHub Actions
