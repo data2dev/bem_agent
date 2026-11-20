@@ -56,6 +56,23 @@ PARAMETERS: dict[str, str] = {
 MAX_CASES = 48
 MAX_VALUES_PER_PARAMETER = 8
 
+TABLE_METRICS = (
+    "peak_cooling_kw",
+    "peak_heating_kw",
+    "peak_cooling_w_m2",
+    "peak_heating_w_m2",
+    "cooling_capacity_kw",
+    "heating_capacity_kw",
+    "site_eui_kwh_m2",
+)
+SUMMARY_METRICS = (
+    "peak_cooling_kw",
+    "peak_heating_kw",
+    "cooling_capacity_kw",
+    "heating_capacity_kw",
+    "site_eui_kwh_m2",
+)
+
 HVAC_LABELS = {"ideal_loads": "Ideal", "vav_chiller_boiler": "VAV", "pthp": "PTHP"}
 
 
@@ -189,10 +206,12 @@ class StudyResult:
     db_path: Path | None = None
 
     def table(self) -> list[dict[str, Any]]:
+        capacities = self._capacities()
         rows = []
         for case in self.cases:
             run = self.runs.get(case.index)
             summary = run.summary() if run else {"status": "not_run"}
+            summary = {**summary, **capacities.get(summary.get("run_id"), {})}
             rows.append(
                 {
                     "case": case.index,
@@ -200,20 +219,30 @@ class StudyResult:
                     **{PARAMETERS[p]: v for p, v in case.overrides.items()},
                     "run_id": summary.get("run_id"),
                     "status": summary["status"],
-                    **{
-                        k: summary.get(k)
-                        for k in (
-                            "peak_cooling_kw",
-                            "peak_heating_kw",
-                            "peak_cooling_w_m2",
-                            "peak_heating_w_m2",
-                            "site_eui_kwh_m2",
-                        )
-                        if k in summary
-                    },
+                    **{k: summary.get(k) for k in TABLE_METRICS if summary.get(k) is not None},
                 }
             )
         return rows
+
+    def _capacities(self) -> dict[str, dict[str, float]]:
+        """Installed capacities per run_id, as computed by the ETL into results.db."""
+        if not self.db_path or not Path(self.db_path).exists():
+            return {}
+        ids = [r.run_id for r in self.runs.values()]
+        if not ids:
+            return {}
+        from ..results.queries import compare_runs
+
+        try:
+            rows = compare_runs(self.db_path, ids)
+        except Exception:  # noqa: BLE001 - capacities are optional extras
+            return {}
+        return {
+            r["run_id"]: {
+                k: r[k] for k in ("cooling_capacity_kw", "heating_capacity_kw") if r[k] is not None
+            }
+            for r in rows
+        }
 
     def summary(self) -> dict[str, Any]:
         """Compact study summary for the LLM: counts, best cases, main effects."""
@@ -228,11 +257,7 @@ class StudyResult:
         failed = [f"case {r['case']} ({r['label']}): {r['status']}" for r in table if r not in ok]
         if failed:
             out["failed"] = failed
-        metrics = [
-            m
-            for m in ("peak_cooling_kw", "peak_heating_kw", "site_eui_kwh_m2")
-            if any(m in r for r in ok)
-        ]
+        metrics = [m for m in SUMMARY_METRICS if any(m in r for r in ok)]
         out["best"] = {
             m: min((r for r in ok if r.get(m) is not None), key=lambda r: r[m])["label"]
             for m in metrics

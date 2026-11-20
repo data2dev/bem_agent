@@ -139,6 +139,8 @@ def test_run_study(ran):
     # WWR effect averaged over HVAC systems: 30% -> (130+150+140)/3, 50% -> (150+170)/2
     assert effects["WWR"]["peak_cooling_kw"] == {"30%": 140.0, "50%": 160.0}
     assert effects["HVAC"]["peak_cooling_kw"] == {"Ideal": 140.0, "VAV": 160.0, "PTHP": 140.0}
+    assert table[0]["cooling_capacity_kw"] == 120.0  # from the ETL'd equipment sizes
+    assert "cooling_capacity_kw" in effects["WWR"]
     saved = json.loads((base / "studies" / result.study_id / "summary.json").read_text())
     assert len(saved["table"]) == 6
 

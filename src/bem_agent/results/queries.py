@@ -26,6 +26,8 @@ COMPARE_COLUMNS = [
     "peak_heating_kw",
     "peak_cooling_w_m2",
     "peak_heating_w_m2",
+    "cooling_capacity_kw",
+    "heating_capacity_kw",
     "site_eui_kwh_m2",
     "unmet_heating_h",
     "unmet_cooling_h",
@@ -244,6 +246,7 @@ def schema_description() -> str:
         "runs(run_id, name, location, hvac, run_period, envelope, loads, schedules, "
         "floor_area_m2, num_floors, window_to_wall_ratio, orientation_deg, status, "
         "peak_cooling_kw, peak_heating_kw, peak_cooling_w_m2, peak_heating_w_m2, "
+        "cooling_capacity_kw, heating_capacity_kw, "
         "site_energy_kwh, site_eui_kwh_m2, unmet_heating_h, unmet_cooling_h); "
         "zone_sizing(run_id, zone, load_type, design_load_kw, design_day, peak_time); "
         "equipment_sizing(run_id, component_type, component, description, value, units); "
