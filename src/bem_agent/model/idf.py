@@ -105,6 +105,7 @@ _REFERENCES: list[tuple[str, int, tuple[str, ...]]] = [
     ("HVACTemplate:Zone:VAV", 1, ("HVACTemplate:System:VAV",)),
     ("HVACTemplate:Zone:VAV", 2, ("HVACTemplate:Thermostat",)),
     ("HVACTemplate:Zone:PTHP", 0, ("Zone",)),
+    ("Sizing:Zone", 0, ("Zone", "ZoneList")),
     ("HVACTemplate:Zone:PTHP", 1, ("HVACTemplate:Thermostat",)),
 ]
 
