@@ -16,6 +16,9 @@ from .idf import IDFObject
 class Envelope(BaseModel):
     wall_insulation_r_si: float = Field(2.3, gt=0, le=15, description="m²·K/W")
     roof_insulation_r_si: float = Field(4.4, gt=0, le=20, description="m²·K/W")
+    slab_insulation_r_si: float = Field(
+        1.76, gt=0, le=10, description="m²·K/W under the ground-floor slab"
+    )
     window_u_si: float = Field(2.4, ge=0.5, le=6.0, description="W/m²·K")
     window_shgc: float = Field(0.38, gt=0, lt=1)
     window_vt: float = Field(0.5, gt=0, lt=1)
@@ -25,6 +28,7 @@ ENVELOPE_PRESETS: dict[str, Envelope] = {
     "efficient": Envelope(
         wall_insulation_r_si=3.5,
         roof_insulation_r_si=6.0,
+        slab_insulation_r_si=2.6,
         window_u_si=1.4,
         window_shgc=0.25,
         window_vt=0.45,
@@ -33,6 +37,7 @@ ENVELOPE_PRESETS: dict[str, Envelope] = {
     "older": Envelope(
         wall_insulation_r_si=0.7,
         roof_insulation_r_si=1.5,
+        slab_insulation_r_si=0.2,
         window_u_si=5.0,
         window_shgc=0.6,
         window_vt=0.7,
@@ -73,6 +78,10 @@ def construction_objects(env: Envelope) -> list[IDFObject]:
             ["Roof_Insulation", "MediumRough", env.roof_insulation_r_si, 0.9, 0.7, 0.7],
         ),
         IDFObject(
+            "Material:NoMass",
+            ["Slab_Insulation", "MediumRough", env.slab_insulation_r_si, 0.9, 0.7, 0.7],
+        ),
+        IDFObject(
             "WindowMaterial:SimpleGlazingSystem",
             ["Glazing", env.window_u_si, env.window_shgc, env.window_vt],
         ),
@@ -80,7 +89,9 @@ def construction_objects(env: Envelope) -> list[IDFObject]:
         IDFObject(
             "Construction", [g.ROOF, "Roof_Membrane_10mm", "Roof_Insulation", "Metal_Deck_1.5mm"]
         ),
-        IDFObject("Construction", [g.GROUND_FLOOR, "Concrete_200mm"]),
+        # Insulation below the slab; without it an 18 °C ground pulls enough heat out of
+        # ground-floor core zones to cancel their internal gains.
+        IDFObject("Construction", [g.GROUND_FLOOR, "Slab_Insulation", "Concrete_200mm"]),
         IDFObject("Construction", [g.INTERIOR_FLOOR, "Concrete_200mm"]),
         IDFObject("Construction", [g.INTERIOR_WALL, "Gypsum_13mm", "Gypsum_13mm"]),
         IDFObject("Construction", [g.WINDOW, "Glazing"]),
