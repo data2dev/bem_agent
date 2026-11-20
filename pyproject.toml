@@ -8,7 +8,11 @@ version = "0.1.0"
 description = "An LLM agent that drives EnergyPlus building energy simulations through MCP tool calls."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "anthropic>=0.40",
+    "openai>=1.40",
+    "pydantic>=2.7",
+]
 
 [project.optional-dependencies]
 dev = [
