@@ -1,0 +1,71 @@
+{
+  "description": "3-story office in Chicago, ideal loads. Guards against drift in computed design loads.",
+  "energyplus_version": "25.1",
+  "rel_tolerance": 0.02,
+  "spec": {
+    "name": "Reference Office Chicago",
+    "location": "chicago",
+    "geometry": {
+      "length_m": 50.0,
+      "width_m": 30.0,
+      "num_floors": 3,
+      "floor_to_floor_m": 4.0,
+      "window_to_wall_ratio": 0.35,
+      "orientation_deg": 0.0,
+      "perimeter_depth_m": 4.57
+    },
+    "envelope": {
+      "wall_insulation_r_si": 2.3,
+      "roof_insulation_r_si": 4.4,
+      "window_u_si": 2.4,
+      "window_shgc": 0.38,
+      "window_vt": 0.5
+    },
+    "loads": {
+      "people_per_m2": 0.054,
+      "lighting_w_per_m2": 8.0,
+      "equipment_w_per_m2": 8.0,
+      "infiltration_m3s_per_m2_ext": 0.0003
+    },
+    "schedules": {
+      "weekdays": [
+        8,
+        18
+      ],
+      "saturday": [
+        8,
+        13
+      ],
+      "sunday_holidays": null,
+      "occupancy": [
+        0.95,
+        0.0
+      ],
+      "lighting": [
+        0.9,
+        0.05
+      ],
+      "equipment": [
+        0.9,
+        0.3
+      ],
+      "heating_c": [
+        21.1,
+        15.6
+      ],
+      "cooling_c": [
+        24.0,
+        29.4
+      ],
+      "hvac_lead_hours": 2
+    },
+    "hvac": "ideal_loads",
+    "run_period": "sizing_only"
+  },
+  "expected": {
+    "peak_cooling_kw": 119.5,
+    "peak_heating_kw": 136.8,
+    "peak_cooling_w_m2": 26.6,
+    "peak_heating_w_m2": 30.4
+  }
+}

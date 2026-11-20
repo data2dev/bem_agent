@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 1 done (in review); next is Phase 2
-- **Done:** Phase 0 merged. In review: LLM provider layer (PR #3) and the Phase 1 model builder (PR #4); every HVAC system completes an EnergyPlus sizing run in CI
-- **Next:** you run `deploy/gcp_setup.sh` in Cloud Shell (project `projectbem`, region `us-east1`); Claude starts Phase 2 (runner and V&V)
+- **Phase:** 2 done (in review); next is Phase 3
+- **Done:** Phases 0-1 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 2 runner + V&V (PR #6), all EnergyPlus tests green in CI
+- **Next:** Phase 3 (results ETL into `results.db`, time series, plots)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -58,8 +58,8 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [ ] Create a Groq account and API key
 - [x] GCP project `projectbem` created; region `us-east1`
 - [x] Setup script `deploy/gcp_setup.sh`: APIs, Artifact Registry, GCS bucket, Secret Manager (`GROQ_API_KEY`), runtime + deployer service accounts, Workload Identity Federation (this repo, `main` only)
-- [ ] Link billing and set a budget alert on `projectbem`
-- [ ] Run `deploy/gcp_setup.sh` in Cloud Shell and send back the printed values
+- [x] Run `deploy/gcp_setup.sh` in Cloud Shell; identifiers saved in `deploy/gcp.env`
+- [ ] Confirm a budget alert is set on `projectbem`
 
 ### Phase 1: Model builder
 - [x] Parametric geometry: footprint (or total area + aspect ratio), floors, floor-to-floor height, window-to-wall ratio, orientation; perimeter/core zoning
@@ -71,10 +71,12 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] CLI: `python -m bem_agent.model ... -o in.idf`
 
 ### Phase 2: Runner and V&V
-- [ ] Single-run wrapper around EnergyPlus with SQLite output enabled
-- [ ] Pre-run validation: geometry bounds, WWR range, schedule completeness, missing fields
-- [ ] Post-run checks: severe errors in `.err`, unmet hours, implausible EUI or loads per area
-- [ ] Reference case and regression test (stored expected loads, with tolerance)
+- [x] Runner: EnergyPlus via shell-free subprocess with timeout; `eplusout.err` parsed into warnings, severe errors and messages
+- [x] Pre-run validation (`validate_spec`): setpoint deadband and setback logic, geometry and load sanity, weather file, model references. Errors block the run; warnings don't
+- [x] Post-run checks: clean completion, SQLite written, every zone sized, peak load density, EUI and unmet hours (annual runs)
+- [x] `simulate()`: validate → build → run → check; one folder per run under `$BEM_RUNS_DIR` with `spec.json`, `in.idf`, outputs, `run.json`; compact summary for the LLM
+- [x] Reference case and regression test (`tests/reference/office_chicago_ideal.json`, ±2%; regenerate with `scripts/update_reference.py`)
+- Note: ideal-loads peaks are zone sensible loads without ventilation air; equipment systems (VAV, PTHP) include outdoor air in sizing
 
 ### Phase 3: Results, ETL and analysis
 - [ ] Extract peak heating and cooling loads and autosized equipment capacities
@@ -122,3 +124,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Write IDF directly (no eppy, which needs the IDD at runtime). HVAC via HVACTemplate + `--expandobjects`; template fields generated from the 25.1 IDD because ExpandObjects ignores defaults. |
 | 2026-11-20 | Simplified geometry: rectangular perimeter/core zones, adiabatic partitions and interior floors. Fine for load and sizing comparisons. |
 | 2026-11-20 | GCP project `projectbem`, region `us-east1`. Setup is a reviewed script you run in Cloud Shell; Claude has no GCP access. |
+| 2026-11-20 | Ideal-loads models get explicit `Sizing:Zone` objects (the template creates none). Caught by the post-run `ZONES_NOT_SIZED` check. |

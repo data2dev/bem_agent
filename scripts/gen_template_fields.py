@@ -1,5 +1,7 @@
 """Generate src/bem_agent/model/_template_fields.py from an EnergyPlus IDD file.
 
+Covers the HVACTemplate objects plus Sizing:Zone (written for ideal-loads models).
+
 ExpandObjects (which turns HVACTemplate objects into full HVAC systems) does not apply
 IDD defaults to blank or missing fields, so every template object must be written out
 in full. This script records each template's field names and defaults.
@@ -22,6 +24,7 @@ OBJECTS = [
     "HVACTemplate:Plant:Chiller",
     "HVACTemplate:Plant:HotWaterLoop",
     "HVACTemplate:Plant:Boiler",
+    "Sizing:Zone",
 ]
 
 FIELD = re.compile(r"^\s+[AN]\d+\s*[,;]\s*\\field\s+(.+?)\s*$", re.M)

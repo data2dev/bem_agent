@@ -36,7 +36,7 @@ class HVACSystem(StrEnum):
 
 
 def template(type_: str, **overrides: FieldValue) -> IDFObject:
-    """A full HVACTemplate object: IDD defaults with overrides by field name.
+    """A fully written object (HVACTemplate or Sizing:Zone): IDD defaults + overrides.
 
     Override keys are field names with spaces/dashes as underscores, case-insensitive,
     e.g. `zone_name="F1_Core"`, `reheat_coil_type="HotWater"`.
@@ -61,14 +61,31 @@ def hvac_objects(system: HVACSystem, zone_names: list[str]) -> list[IDFObject]:
         IDFObject("HVACTemplate:Thermostat", [THERMOSTAT, s.HEATING_SP, "", s.COOLING_SP, ""])
     ]
     if system is HVACSystem.IDEAL_LOADS:
-        objects += [
-            template(
-                "HVACTemplate:Zone:IdealLoadsAirSystem",
-                zone_name=z,
-                template_thermostat_name=THERMOSTAT,
+        for z in zone_names:
+            objects.append(
+                template(
+                    "HVACTemplate:Zone:IdealLoadsAirSystem",
+                    zone_name=z,
+                    template_thermostat_name=THERMOSTAT,
+                )
             )
-            for z in zone_names
-        ]
+            # Unlike the equipment templates, the ideal-loads template creates no
+            # Sizing:Zone, and without one EnergyPlus reports no zone design loads.
+            # Supply temperatures match the template's 13 °C / 50 °C limits.
+            objects.append(
+                template(
+                    "Sizing:Zone",
+                    zone_or_zonelist_name=z,
+                    zone_cooling_design_supply_air_temperature=13.0,
+                    zone_cooling_design_supply_air_temperature_difference=11.11,
+                    zone_heating_design_supply_air_temperature=50.0,
+                    zone_heating_design_supply_air_temperature_difference=30.0,
+                    zone_cooling_design_supply_air_humidity_ratio=0.0085,
+                    zone_heating_design_supply_air_humidity_ratio=0.008,
+                    zone_heating_sizing_factor=1.0,
+                    zone_cooling_sizing_factor=1.0,
+                )
+            )
     elif system is HVACSystem.PTHP:
         objects += [
             template("HVACTemplate:Zone:PTHP", zone_name=z, template_thermostat_name=THERMOSTAT)
