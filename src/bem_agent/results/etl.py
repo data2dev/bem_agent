@@ -10,6 +10,8 @@ Tables:
     equipment_sizing  autosized component capacities (chiller, boiler, coils, fans, ...)
     end_uses          annual energy by end use and fuel (annual runs)
     hourly            hourly meters and zone temperatures (annual runs)
+    studies           parametric studies: name and the parameters varied
+    study_cases       which run is which case of a study
 """
 
 from __future__ import annotations
@@ -63,6 +65,14 @@ CREATE TABLE IF NOT EXISTS hourly (
     run_id TEXT, variable TEXT, key TEXT, units TEXT,
     month INTEGER, day INTEGER, hour INTEGER,  -- hour = hour ending, 1..24
     value REAL
+);
+CREATE TABLE IF NOT EXISTS studies (
+    study_id TEXT PRIMARY KEY, name TEXT, parameters_json TEXT, n_cases INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS study_cases (
+    study_id TEXT, case_index INTEGER, run_id TEXT, label TEXT, overrides_json TEXT,
+    PRIMARY KEY (study_id, case_index)
 );
 CREATE INDEX IF NOT EXISTS hourly_lookup ON hourly (run_id, variable, key);
 CREATE INDEX IF NOT EXISTS equipment_lookup ON equipment_sizing (run_id);
@@ -241,3 +251,24 @@ def load_run(run_dir: str | Path, db_path: str | Path) -> dict[str, int]:
         for table, stmt in inserts.items():
             con.executemany(stmt, [(run_id, *r) for r in data[table]])
     return {"runs": 1, **{t: len(v) for t, v in data.items()}}
+
+
+def record_study(
+    db_path: str | Path,
+    study_id: str,
+    name: str,
+    parameters: dict[str, list[Any]],
+    cases: list[tuple[int, str, str, dict[str, Any]]],
+) -> None:
+    """Record a parametric study; `cases` = (case index, run_id, label, overrides)."""
+    with closing(connect(Path(db_path))) as con, con:
+        con.execute("DELETE FROM study_cases WHERE study_id = ?", (study_id,))
+        con.execute(
+            "INSERT OR REPLACE INTO studies (study_id, name, parameters_json, n_cases) "
+            "VALUES (?,?,?,?)",
+            (study_id, name, json.dumps(parameters), len(cases)),
+        )
+        con.executemany(
+            "INSERT INTO study_cases VALUES (?,?,?,?,?)",
+            [(study_id, i, run_id, label, json.dumps(o)) for i, run_id, label, o in cases],
+        )
