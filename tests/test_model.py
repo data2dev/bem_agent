@@ -180,6 +180,18 @@ def test_design_day_selection():
     assert "Clg .4% Condns DB=>MWB" in cooling.name
 
 
+def test_resolve_city_keeps_dotted_stem(tmp_path):
+    from bem_agent.model.weather import CITIES
+
+    folder = tmp_path / "WeatherData"
+    folder.mkdir()
+    for ext in ("epw", "ddy"):
+        (folder / f"{CITIES['chicago']}.{ext}").write_text(DDY)
+    w = resolve_weather("Chicago", eplus_dir=tmp_path)
+    assert w.epw.name == "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
+    assert len(w.site_objects()) == 3
+
+
 def test_resolve_weather_errors(tmp_path, monkeypatch):
     monkeypatch.delenv("ENERGYPLUS_DIR", raising=False)
     with pytest.raises(WeatherError, match="ENERGYPLUS_DIR"):
