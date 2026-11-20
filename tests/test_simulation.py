@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from bem_agent.model import CITIES, BuildingSpec, HVACSystem, resolve_weather
+from bem_agent.results import compare_runs, end_uses, equipment_sizes, run_sql, timeseries
+from bem_agent.results.plots import plot_metric_comparison, plot_timeseries
 from bem_agent.sim import simulate
 
 pytestmark = pytest.mark.energyplus
@@ -15,6 +17,7 @@ pytestmark = pytest.mark.energyplus
 ROOT = Path(__file__).resolve().parents[1]
 OUT_ROOT = ROOT / "runs" / "ci"
 REFERENCE = Path(__file__).parent / "reference" / "office_chicago_ideal.json"
+DB = OUT_ROOT / "results.db"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -53,6 +56,17 @@ def test_sizing_pipeline(hvac):
     assert s["energyplus"]["severe"] == 0
     assert s["peak_cooling_kw"] > 0 and s["peak_heating_kw"] > 0
     assert len(run.metrics.zones_sized) == 10
+    # ETL: the run and its zone sizing landed in results.db
+    row = compare_runs(DB, [run.run_id])[0]
+    assert row["peak_cooling_kw"] == s["peak_cooling_kw"]
+    zones = run_sql(DB, f"SELECT COUNT(*) FROM zone_sizing WHERE run_id = '{run.run_id}'")
+    assert zones["rows"][0][0] == 20  # 10 zones x heating/cooling
+    equipment = equipment_sizes(DB, run.run_id)
+    print(json.dumps(equipment[:15], indent=1))
+    if hvac is HVACSystem.VAV:
+        types = {e["component_type"].lower() for e in equipment}
+        assert any("chiller" in t for t in types), types
+        assert any("boiler" in t for t in types), types
 
 
 def test_annual_run_reports_eui_and_unmet_hours():
@@ -62,6 +76,23 @@ def test_annual_run_reports_eui_and_unmet_hours():
     print(json.dumps(s, indent=2))
     assert s["site_eui_kwh_m2"] > 0
     assert "unmet_hours" in s
+    # ETL: hourly series, monthly aggregation, end uses, plots
+    monthly = timeseries(DB, run.run_id, "DistrictCooling:Facility", freq="monthly")
+    print(json.dumps(monthly, indent=1))
+    assert [p["month"] for p in monthly] == list(range(1, 13))
+    assert max(p["value"] for p in monthly) > 0
+    july = next(p["value"] for p in monthly if p["month"] == 7)
+    january = next(p["value"] for p in monthly if p["month"] == 1)
+    assert july > january  # Chicago: more cooling in July than January
+    temps = timeseries(DB, run.run_id, "Zone Mean Air Temperature", freq="annual", key="*")
+    assert 15 < temps[0]["value"] < 30
+    uses = end_uses(DB, run.run_id)
+    print(json.dumps(uses, indent=1))
+    assert uses
+    png = plot_timeseries(DB, [run.run_id], "DistrictCooling:Facility", OUT_ROOT / "cooling.png")
+    assert png.stat().st_size > 1000
+    png = plot_metric_comparison(DB, [run.run_id], "site_eui_kwh_m2", OUT_ROOT / "eui.png")
+    assert png.stat().st_size > 1000
 
 
 def test_reference_case_regression():

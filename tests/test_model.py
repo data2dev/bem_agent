@@ -256,7 +256,14 @@ def test_presets_by_name_and_errors():
     spec = BuildingSpec(envelope="efficient", loads="retail", schedules="retail")
     assert spec.envelope.window_u_si == 1.4
     assert spec.schedules.sunday_holidays == (11, 18)
+    assert spec.presets == {"envelope": "efficient", "loads": "retail", "schedules": "retail"}
+    assert BuildingSpec(loads={"lighting_w_per_m2": 5}).presets["loads"] == "custom"
+    assert BuildingSpec().presets["envelope"] == "typical"
+    roundtrip = BuildingSpec.model_validate_json(spec.model_dump_json())
+    assert roundtrip.presets == spec.presets
     with pytest.raises(ValidationError, match="unknown envelope preset"):
         BuildingSpec(envelope="glass_box")
     with pytest.raises(ValidationError):
-        BuildingSpec(name="bad;name")
+        BuildingSpec(name="two\nlines")
+    text = build_idf(BuildingSpec(name="VAV, WWR 30%; v2!"), site_objects=site())
+    assert find(parse_idf(text), "Building")[0].fields[0] == "VAV WWR 30% v2"
