@@ -74,7 +74,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Runner: EnergyPlus via shell-free subprocess with timeout; `eplusout.err` parsed into warnings, severe errors and messages
 - [x] Pre-run validation (`validate_spec`): setpoint deadband and setback logic, geometry and load sanity, weather file, model references. Errors block the run; warnings don't
 - [x] Post-run checks: clean completion, SQLite written, every zone sized, peak load density, EUI and unmet hours (annual runs)
-- [x] `simulate()`: validate → build → run → check; one folder per run under `$BEM_RUNS_DIR` with `spec.json`, `in.idf`, outputs, `run.json`; compact summary for the LLM
+- [x] `simulate()`: validate → build → run → check; one folder per run under `$BEM_RUNS_DIR` with `spec.json`, `model.idf`, outputs, `run.json`; compact summary for the LLM
 - [x] Reference case and regression test (`tests/reference/office_chicago_ideal.json`, ±2%; regenerate with `scripts/update_reference.py`)
 - Note: ideal-loads peaks are zone sensible loads without ventilation air; equipment systems (VAV, PTHP) include outdoor air in sizing
 
