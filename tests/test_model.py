@@ -236,6 +236,9 @@ def test_full_model_has_no_broken_references(hvac):
         HVACSystem.PTHP: "HVACTemplate:Zone:PTHP",
     }[hvac]
     assert len(find(objs, template)) == len(zones_)
+    # ideal loads needs explicit zone sizing objects (the template creates none)
+    expected_sizing = len(zones_) if hvac is HVACSystem.IDEAL_LOADS else 0
+    assert len(find(objs, "Sizing:Zone")) == expected_sizing
 
 
 def test_build_idf_text():
