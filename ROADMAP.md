@@ -8,14 +8,13 @@ _Last updated: 2026-11-20_
 
 - **Phase:** 1 done (in review); next is Phase 2
 - **Done:** Phase 0 merged. In review: LLM provider layer (PR #3) and the Phase 1 model builder (PR #4); every HVAC system completes an EnergyPlus sizing run in CI
-- **Next:** Phase 2 (runner and V&V); GCP setup once the project ID is in
+- **Next:** you run `deploy/gcp_setup.sh` in Cloud Shell (project `projectbem`, region `us-east1`); Claude starts Phase 2 (runner and V&V)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
   - **GCP (Cloud Run):** the deployed demo. The local PC is not used.
 - **LLM:** Groq free tier, default model `openai/gpt-oss-120b` (30 requests/min, 1,000 requests/day, 8K tokens/min, 200K tokens/day). `llama-3.3-70b-versatile` is the alternative to compare against in Phase 5.
 - **Open questions:**
-  - GCP project ID for `bem-agent-demo`, and a region.
   - Groq API key (goes into Secret Manager, never into the repo or chat).
 
 ## Goal
@@ -32,8 +31,8 @@ An agent that takes a plain-language building energy question and answers it by 
 
 Context: an AI tool once changed an unrelated GCP project. These rules keep `bem_agent` fully isolated.
 
-1. **One dedicated GCP project**, `bem-agent-demo`, separate from all other work, with a budget alert. It holds Cloud Run, the GCS bucket, Artifact Registry and Secret Manager, and nothing else.
-2. **LLM access by Groq API key only**, stored in Secret Manager in `bem-agent-demo`. The LLM provider has no access to GCP.
+1. **One dedicated GCP project**, `projectbem`, separate from all other work, with a budget alert. It holds Cloud Run, the GCS bucket, Artifact Registry and Secret Manager, and nothing else.
+2. **LLM access by Groq API key only**, stored in Secret Manager in `projectbem`. The LLM provider has no access to GCP.
 3. **The agent can call only our simulation tools.** No shell, no `gcloud`, no arbitrary file access; all file paths confined to the runs directory and validated.
 4. **Least-privilege service accounts:** the Cloud Run runtime account gets access to its own bucket and the Groq key secret only; the GitHub deploy account (Workload Identity Federation, no key files, limited to this repo) can only push images and update this service.
 5. **Every `gcloud` command names `--project` explicitly**; you review and run them; Claude has no GCP access.
@@ -57,7 +56,10 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] `.env.example`
 - [ ] License
 - [ ] Create a Groq account and API key
-- [ ] Create `bem-agent-demo` with budget alert, Artifact Registry, GCS bucket, Secret Manager (`GROQ_API_KEY`), Workload Identity Federation for GitHub
+- [x] GCP project `projectbem` created; region `us-east1`
+- [x] Setup script `deploy/gcp_setup.sh`: APIs, Artifact Registry, GCS bucket, Secret Manager (`GROQ_API_KEY`), runtime + deployer service accounts, Workload Identity Federation (this repo, `main` only)
+- [ ] Link billing and set a budget alert on `projectbem`
+- [ ] Run `deploy/gcp_setup.sh` in Cloud Shell and send back the printed values
 
 ### Phase 1: Model builder
 - [x] Parametric geometry: footprint (or total area + aspect ratio), floors, floor-to-floor height, window-to-wall ratio, orientation; perimeter/core zoning
@@ -119,3 +121,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Keep Claude (and other providers) switchable: one `BEM_LLM_PROVIDER` / `BEM_LLM_MODEL` setting. Claude via Anthropic API key only, not Vertex, so the LLM never needs GCP credentials (guardrail 2). |
 | 2026-11-20 | Write IDF directly (no eppy, which needs the IDD at runtime). HVAC via HVACTemplate + `--expandobjects`; template fields generated from the 25.1 IDD because ExpandObjects ignores defaults. |
 | 2026-11-20 | Simplified geometry: rectangular perimeter/core zones, adiabatic partitions and interior floors. Fine for load and sizing comparisons. |
+| 2026-11-20 | GCP project `projectbem`, region `us-east1`. Setup is a reviewed script you run in Cloud Shell; Claude has no GCP access. |
