@@ -50,15 +50,17 @@ def resolve_weather(location: str, eplus_dir: str | os.PathLike | None = None) -
     """`location` is a city key from CITIES or a path to an .epw with a .ddy beside it."""
     key = location.strip().lower().replace(" ", "_")
     if key in CITIES:
-        base = energyplus_dir(eplus_dir) / "WeatherData" / CITIES[key]
-        epw, ddy = base.with_suffix(".epw"), base.with_suffix(".ddy")
+        # Build names by concatenation: stems contain dots ("...Intl.AP.725300_TMY3"),
+        # which Path.with_suffix would treat as an extension.
+        folder, stem = energyplus_dir(eplus_dir) / "WeatherData", CITIES[key]
+        epw, ddy = folder / f"{stem}.epw", folder / f"{stem}.ddy"
     else:
         epw = Path(location)
         if epw.suffix.lower() != ".epw":
             raise WeatherError(
                 f"Unknown location {location!r}. Use one of {sorted(CITIES)} or an .epw path."
             )
-        ddy = epw.with_suffix(".ddy")
+        ddy = epw.with_name(epw.name[: -len(epw.suffix)] + ".ddy")
     for p in (epw, ddy):
         if not p.is_file():
             raise WeatherError(f"Weather file not found: {p}")
