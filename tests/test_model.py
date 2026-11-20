@@ -204,6 +204,23 @@ def test_resolve_weather_errors(tmp_path, monkeypatch):
         resolve_weather(str(epw))
 
 
+# ---------- HVAC templates ----------
+
+
+def test_template_objects_are_complete():
+    from bem_agent.model._template_fields import TEMPLATE_FIELDS
+    from bem_agent.model.hvac import hvac_objects, template
+
+    for obj in hvac_objects(HVACSystem.VAV, ["Z1", "Z2"]):
+        if obj.type in TEMPLATE_FIELDS:
+            assert len(obj.fields) == len(TEMPLATE_FIELDS[obj.type]), obj.type
+    zone = template("HVACTemplate:Zone:VAV", zone_name="Z1", reheat_coil_type="HotWater")
+    assert zone.fields[0] == "Z1"
+    assert "HotWater" in zone.fields
+    with pytest.raises(KeyError):
+        template("HVACTemplate:Zone:VAV", not_a_field=1)
+
+
 # ---------- full model ----------
 
 
