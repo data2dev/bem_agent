@@ -15,6 +15,7 @@ from ..model.building import BuildingSpec, write_idf
 from ..model.geometry import zones
 from ..model.weather import resolve_weather
 from ..results.etl import load_run
+from ..results.queries import compare_runs
 from ..validation.post import RunMetrics, check_metrics, check_run, extract_metrics
 from ..validation.pre import validate_spec
 from ..validation.report import ValidationReport
@@ -65,6 +66,7 @@ class SimulationRun:
             out["peak_heating_kw"] = round(m.peak_heating_w / 1000, 1)
             out["peak_cooling_w_m2"] = round(m.peak_cooling_w / m.floor_area_m2, 1)
             out["peak_heating_w_m2"] = round(m.peak_heating_w / m.floor_area_m2, 1)
+            out.update(self.extra.get("capacity", {}))
             if m.eui_kwh_m2 is not None:
                 out["site_eui_kwh_m2"] = round(m.eui_kwh_m2, 1)
             if m.unmet_hours is not None:
@@ -94,7 +96,8 @@ def simulate(
         return _finish(result, base_dir, load_results)
 
     weather = resolve_weather(spec.location)
-    idf = write_idf(spec, out_dir / "in.idf", site_objects=weather.site_objects())
+    # Not "in.idf": EnergyPlus creates its own in.idf link in the run folder.
+    idf = write_idf(spec, out_dir / "model.idf", site_objects=weather.site_objects())
     result.run = run_energyplus(idf, weather.epw, out_dir, timeout_s=timeout_s)
     result.post = check_run(result.run)
     if result.post.ok:
@@ -113,7 +116,12 @@ def simulate(
 def _finish(result: SimulationRun, base_dir: Path | None, load_results: bool) -> SimulationRun:
     _save(result)
     if load_results:
-        result.extra["loaded_rows"] = load_run(result.out_dir, results_db_path(base_dir))
+        db = results_db_path(base_dir)
+        result.extra["loaded_rows"] = load_run(result.out_dir, db)
+        row = compare_runs(db, [result.run_id])[0]
+        result.extra["capacity"] = {
+            k: row[k] for k in ("cooling_capacity_kw", "heating_capacity_kw") if row[k] is not None
+        }
     return result
 
 

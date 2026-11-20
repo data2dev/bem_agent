@@ -8,9 +8,16 @@ from pathlib import Path
 import pytest
 
 from bem_agent.model import CITIES, BuildingSpec, HVACSystem, resolve_weather
-from bem_agent.results import compare_runs, end_uses, equipment_sizes, run_sql, timeseries
-from bem_agent.results.plots import plot_metric_comparison, plot_timeseries
-from bem_agent.sim import simulate
+from bem_agent.results import (
+    compare_runs,
+    end_uses,
+    equipment_sizes,
+    run_sql,
+    study_table,
+    timeseries,
+)
+from bem_agent.results.plots import plot_metric_comparison, plot_study, plot_timeseries
+from bem_agent.sim import ParametricStudy, run_study, simulate
 
 pytestmark = pytest.mark.energyplus
 
@@ -66,11 +73,17 @@ def test_sizing_pipeline(hvac):
     )
     assert zones["rows"] == [["Cooling", 10], ["Heating", 10]]
     equipment = equipment_sizes(DB, run.run_id)
-    print(json.dumps(equipment[:15], indent=1))
+    print(json.dumps(equipment, indent=1))
     if hvac is HVACSystem.VAV:
         types = {e["component_type"].lower() for e in equipment}
         assert any("chiller" in t for t in types), types
         assert any("boiler" in t for t in types), types
+    if hvac is HVACSystem.IDEAL_LOADS:
+        assert "cooling_capacity_kw" not in s
+    else:
+        # equipment also covers ventilation air and fan heat, so it exceeds zone loads
+        assert s["cooling_capacity_kw"] > s["peak_cooling_kw"], s
+        assert s["heating_capacity_kw"] > 0, s
 
 
 def test_annual_run_reports_eui_and_unmet_hours():
@@ -116,3 +129,34 @@ def test_reference_case_regression():
         assert got[key] == pytest.approx(expected, rel=tol), (
             f"{key}: got {got[key]}, reference {expected} (±{tol:.0%})"
         )
+
+
+def test_parametric_study_hvac_by_wwr():
+    study = ParametricStudy(
+        name="CI HVAC x WWR",
+        base=BuildingSpec(location="chicago", geometry={"length_m": 30, "width_m": 20}),
+        parameters={
+            "hvac": ["ideal_loads", "vav_chiller_boiler", "pthp"],
+            "geometry.window_to_wall_ratio": [0.2, 0.5],
+        },
+    )
+    result = run_study(study, base_dir=OUT_ROOT, max_workers=2)
+    summary = result.summary()
+    print(json.dumps(summary, indent=2))
+    assert summary["completed"] == 6, summary
+    # More glass -> higher peak cooling, averaged over HVAC systems
+    wwr = summary["main_effects"]["WWR"]["peak_cooling_kw"]
+    assert wwr["50%"] > wwr["20%"]
+    # ...and for every HVAC system individually
+    rows = study_table(DB, result.study_id)
+    for hvac in ("ideal_loads", "vav_chiller_boiler", "pthp"):
+        by_wwr = {
+            r["window_to_wall_ratio"]: r["peak_cooling_kw"] for r in rows if r["hvac"] == hvac
+        }
+        assert by_wwr[0.5] > by_wwr[0.2], (hvac, by_wwr)
+    # Zone loads don't depend on the HVAC system; installed capacity does.
+    capacity = summary["main_effects"]["HVAC"]["cooling_capacity_kw"]
+    assert set(capacity) == {"VAV", "PTHP"} and capacity["VAV"] != capacity["PTHP"]
+    for metric in ("peak_cooling_kw", "cooling_capacity_kw"):
+        png = plot_study(DB, result.study_id, metric, OUT_ROOT / f"study_{metric}.png")
+        assert png.stat().st_size > 1000

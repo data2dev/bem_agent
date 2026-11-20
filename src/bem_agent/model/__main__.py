@@ -1,7 +1,7 @@
 """Write an IDF from the command line, e.g.:
 
     python -m bem_agent.model --location chicago --floors 3 --length 50 --width 30 \\
-        --wwr 0.4 --hvac vav_chiller_boiler -o runs/demo/in.idf
+        --wwr 0.4 --hvac vav_chiller_boiler -o runs/demo/model.idf
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> None:
         "--hvac", default=HVACSystem.IDEAL_LOADS.value, choices=[h.value for h in HVACSystem]
     )
     p.add_argument("--annual", action="store_true", help="also run the full weather year")
-    p.add_argument("-o", "--output", default="in.idf")
+    p.add_argument("-o", "--output", default="model.idf")
     a = p.parse_args(argv)
 
     spec = BuildingSpec(

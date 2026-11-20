@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from contextlib import closing
@@ -25,6 +26,8 @@ COMPARE_COLUMNS = [
     "peak_heating_kw",
     "peak_cooling_w_m2",
     "peak_heating_w_m2",
+    "cooling_capacity_kw",
+    "heating_capacity_kw",
     "site_eui_kwh_m2",
     "unmet_heating_h",
     "unmet_cooling_h",
@@ -105,6 +108,40 @@ def end_uses(db_path: Path, run_id: str) -> list[dict[str, Any]]:
                 (run_id,),
             )
         )
+
+
+def list_studies(db_path: Path, limit: int = 20) -> list[dict[str, Any]]:
+    with closing(_ro(db_path)) as con:
+        return _rows(
+            con.execute(
+                "SELECT study_id, name, n_cases, parameters_json, created_at FROM studies "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        )
+
+
+def study_table(db_path: Path, study_id: str, sort_by: str | None = None) -> list[dict[str, Any]]:
+    """One row per case: the parameter values it used plus headline results."""
+    if sort_by and sort_by not in COMPARE_COLUMNS:
+        raise QueryError(f"sort_by must be one of {COMPARE_COLUMNS}")
+    cols = ",".join(f"r.{c}" for c in COMPARE_COLUMNS if c not in ("run_id", "name"))
+    with closing(_ro(db_path)) as con:
+        rows = _rows(
+            con.execute(
+                f'SELECT c.case_index AS "case", c.label, c.overrides_json, c.run_id, {cols} '
+                "FROM study_cases c JOIN runs r ON r.run_id = c.run_id "
+                "WHERE c.study_id = ? ORDER BY c.case_index",
+                (study_id,),
+            )
+        )
+    if not rows:
+        raise QueryError(f"Unknown study_id {study_id!r}")
+    for r in rows:
+        r["overrides"] = json.loads(r.pop("overrides_json"))
+    if sort_by:
+        rows.sort(key=lambda r: (r[sort_by] is None, r[sort_by]))
+    return rows
 
 
 _GROUP = {
@@ -209,9 +246,12 @@ def schema_description() -> str:
         "runs(run_id, name, location, hvac, run_period, envelope, loads, schedules, "
         "floor_area_m2, num_floors, window_to_wall_ratio, orientation_deg, status, "
         "peak_cooling_kw, peak_heating_kw, peak_cooling_w_m2, peak_heating_w_m2, "
+        "cooling_capacity_kw, heating_capacity_kw, "
         "site_energy_kwh, site_eui_kwh_m2, unmet_heating_h, unmet_cooling_h); "
         "zone_sizing(run_id, zone, load_type, design_load_kw, design_day, peak_time); "
         "equipment_sizing(run_id, component_type, component, description, value, units); "
         "end_uses(run_id, end_use, fuel, energy_kwh); "
-        "hourly(run_id, variable, key, units, month, day, hour, value)"
+        "hourly(run_id, variable, key, units, month, day, hour, value); "
+        "studies(study_id, name, parameters_json, n_cases); "
+        "study_cases(study_id, case_index, run_id, label, overrides_json)"
     )
