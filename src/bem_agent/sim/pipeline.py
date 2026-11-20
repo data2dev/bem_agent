@@ -14,6 +14,7 @@ from typing import Any, Literal
 from ..model.building import BuildingSpec, write_idf
 from ..model.geometry import zones
 from ..model.weather import resolve_weather
+from ..results.etl import load_run
 from ..validation.post import RunMetrics, check_metrics, check_run, extract_metrics
 from ..validation.pre import validate_spec
 from ..validation.report import ValidationReport
@@ -71,9 +72,17 @@ class SimulationRun:
         return out
 
 
+def results_db_path(base_dir: Path | None = None) -> Path:
+    return (base_dir or runs_dir()) / "results.db"
+
+
 def simulate(
-    spec: BuildingSpec, base_dir: Path | None = None, timeout_s: float = 900
+    spec: BuildingSpec,
+    base_dir: Path | None = None,
+    timeout_s: float = 900,
+    load_results: bool = True,
 ) -> SimulationRun:
+    """Validate, build, run and check one model; then load it into results.db."""
     run_id = new_run_id(spec.name)
     out_dir = (base_dir or runs_dir()) / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -82,7 +91,7 @@ def simulate(
     pre = validate_spec(spec)
     result = SimulationRun(run_id, spec, out_dir, "invalid", pre)
     if not pre.ok:
-        return _save(result)
+        return _finish(result, base_dir, load_results)
 
     weather = resolve_weather(spec.location)
     idf = write_idf(spec, out_dir / "in.idf", site_objects=weather.site_objects())
@@ -98,7 +107,14 @@ def simulate(
         result.status = "completed_with_warnings"
     else:
         result.status = "completed"
-    return _save(result)
+    return _finish(result, base_dir, load_results)
+
+
+def _finish(result: SimulationRun, base_dir: Path | None, load_results: bool) -> SimulationRun:
+    _save(result)
+    if load_results:
+        result.extra["loaded_rows"] = load_run(result.out_dir, results_db_path(base_dir))
+    return result
 
 
 def _save(result: SimulationRun) -> SimulationRun:

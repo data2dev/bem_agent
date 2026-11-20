@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 2 done (in review); next is Phase 3
-- **Done:** Phases 0-1 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 2 runner + V&V (PR #6), all EnergyPlus tests green in CI
-- **Next:** Phase 3 (results ETL into `results.db`, time series, plots)
+- **Phase:** 3 done (in review); next is Phase 4
+- **Done:** Phases 0-2 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 3 results ETL (PR #7), all EnergyPlus tests green in CI
+- **Next:** Phase 4 (parametric runs: case matrix, batch runner, comparison)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -79,10 +79,12 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - Note: ideal-loads peaks are zone sensible loads without ventilation air; equipment systems (VAV, PTHP) include outdoor air in sizing
 
 ### Phase 3: Results, ETL and analysis
-- [ ] Extract peak heating and cooling loads and autosized equipment capacities
-- [ ] ETL: EnergyPlus SQLite → cleaned tables in `results.db` (runs, loads, sizing, hourly)
-- [ ] SQL query helpers to compare runs
-- [ ] Hourly time-series aggregation (daily / monthly) and plots
+- [x] Extract peak heating and cooling loads per zone and autosized equipment capacities (`ComponentSizes`)
+- [x] ETL: each run's `eplusout.sql` → `results.db` tables `runs`, `zone_sizing`, `equipment_sizing`, `end_uses`, `hourly` (J→kWh, weather-file period only, warmup and design days dropped). `simulate()` loads every run automatically, failed and invalid ones included
+- [x] SQL helpers: `compare_runs`, `equipment_sizes`, `end_uses`, and `run_sql` for the agent (read-only connection, SELECT only, one statement, row cap)
+- [x] Hourly time series aggregated hourly / daily / monthly / annual (sum for energy, mean for temperatures; per zone or averaged across zones)
+- [x] Plots: metric comparison bars and time-series lines (PNG), with a CSV table beside each
+- Modeling fixes found by the post-run checks while testing: winter design day now has no internal gains (standard heating-load practice); ground-floor slab is insulated. Reference values regenerated for both
 
 ### Phase 4: Parametric runs
 - [ ] Case-matrix builder (e.g. systems × WWR × orientation)
@@ -103,6 +105,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [ ] Dockerfile: EnergyPlus + `bem_agent`
 - [ ] CI: build the Docker image and run the regression case inside it
 - [ ] CD: on merge to `main`, push the image to GCP Artifact Registry and deploy to Cloud Run
+- [ ] Keep `results.db` off the GCS mount: SQLite needs file locking, which Cloud Storage FUSE doesn't provide. Write the db to local disk and copy it to the bucket after each run (run folders can stay on the mount)
 - [ ] README quick start verified from a clean clone
 
 ### Phase 7: Polish
@@ -125,3 +128,5 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Simplified geometry: rectangular perimeter/core zones, adiabatic partitions and interior floors. Fine for load and sizing comparisons. |
 | 2026-11-20 | GCP project `projectbem`, region `us-east1`. Setup is a reviewed script you run in Cloud Shell; Claude has no GCP access. |
 | 2026-11-20 | Ideal-loads models get explicit `Sizing:Zone` objects (the template creates none). Caught by the post-run `ZONES_NOT_SIZED` check. |
+| 2026-11-20 | Results live in one SQLite `results.db`; the agent gets read-only SQL over it. Charts are static PNG + CSV so any MCP client can show them. |
+| 2026-11-20 | Winter design day without internal gains; insulated slab. Both changed the regression reference on purpose. |

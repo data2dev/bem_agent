@@ -162,6 +162,18 @@ def test_compact_schedule_covers_all_day_types():
     ]
 
 
+def test_winter_design_day_has_no_internal_gains():
+    from bem_agent.model.schedules import schedule_objects
+
+    by_name = {o.name: o.fields for o in schedule_objects(OperatingHours())}
+    for name in ("Occupancy", "Lighting", "Equipment"):
+        f = by_name[name]
+        i = f.index("For: WinterDesignDay")
+        assert f[i + 1 : i + 3] == ["Until: 24:00", 0.0]
+        j = f.index("For: SummerDesignDay")
+        assert f[j + 1 : j + 3] != ["Until: 24:00", 0.0]
+
+
 def test_operating_hours_validation():
     with pytest.raises(ValidationError):
         OperatingHours(weekdays=(18, 8))
@@ -256,7 +268,14 @@ def test_presets_by_name_and_errors():
     spec = BuildingSpec(envelope="efficient", loads="retail", schedules="retail")
     assert spec.envelope.window_u_si == 1.4
     assert spec.schedules.sunday_holidays == (11, 18)
+    assert spec.presets == {"envelope": "efficient", "loads": "retail", "schedules": "retail"}
+    assert BuildingSpec(loads={"lighting_w_per_m2": 5}).presets["loads"] == "custom"
+    assert BuildingSpec().presets["envelope"] == "typical"
+    roundtrip = BuildingSpec.model_validate_json(spec.model_dump_json())
+    assert roundtrip.presets == spec.presets
     with pytest.raises(ValidationError, match="unknown envelope preset"):
         BuildingSpec(envelope="glass_box")
     with pytest.raises(ValidationError):
-        BuildingSpec(name="bad;name")
+        BuildingSpec(name="two\nlines")
+    text = build_idf(BuildingSpec(name="VAV, WWR 30%; v2!"), site_objects=site())
+    assert find(parse_idf(text), "Building")[0].fields[0] == "VAV WWR 30% v2"

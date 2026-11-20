@@ -94,7 +94,7 @@ jobs:
         run: python scripts/update_reference.py --print-only
 
       - name: Simulation and regression tests
-        run: pytest -m energyplus -v
+        run: pytest -m energyplus -v -rP
 
       - name: Upload simulation outputs on failure
         if: failure()
