@@ -4,11 +4,11 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 ## Current status
 
-_Last updated: 2026-11-19_
+_Last updated: 2026-11-20_
 
-- **Phase:** 0, project setup
-- **Done:** README, roadmap, minimal package skeleton, CI pipeline (GitHub Actions), all merged to `main`
-- **Next:** create the GCP project and run the setup commands; start Phase 1 (model builder) in parallel
+- **Phase:** 1 done (in review); next is Phase 2
+- **Done:** Phase 0 merged. In review: LLM provider layer (PR #3) and the Phase 1 model builder (PR #4); every HVAC system completes an EnergyPlus sizing run in CI
+- **Next:** Phase 2 (runner and V&V); GCP setup once the project ID is in
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -60,12 +60,13 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [ ] Create `bem-agent-demo` with budget alert, Artifact Registry, GCS bucket, Secret Manager (`GROQ_API_KEY`), Workload Identity Federation for GitHub
 
 ### Phase 1: Model builder
-- [ ] Parametric geometry: footprint, floors, floor-to-floor height, window-to-wall ratio, orientation
-- [ ] Constructions and internal loads from simple presets
-- [ ] Schedules: occupancy, lighting, HVAC operation (presets plus custom)
-- [ ] HVAC templates: 2–3 systems (e.g. ideal loads, VAV, heat pump)
-- [ ] Weather file handling (a few bundled EPWs for demo cities)
-- [ ] Output: a valid IDF ready to run
+- [x] Parametric geometry: footprint (or total area + aspect ratio), floors, floor-to-floor height, window-to-wall ratio, orientation; perimeter/core zoning
+- [x] Constructions and internal loads from presets (`efficient` / `typical` / `older`; `office` / `retail` / ...) or custom values
+- [x] Schedules from operating hours: presets (`office`, `retail`, `24_7`) plus custom hours and setpoints
+- [x] HVAC templates: ideal loads, VAV with chiller/boiler, PTHP (HVACTemplate objects written in full from IDD defaults)
+- [x] Weather: 5 demo cities from EnergyPlus's bundled EPWs, or any `.epw` with its `.ddy`; design days read from the `.ddy`
+- [x] Output: a valid IDF ready to run (reference checks on every model; EnergyPlus sizing runs pass in CI for all 3 systems)
+- [x] CLI: `python -m bem_agent.model ... -o in.idf`
 
 ### Phase 2: Runner and V&V
 - [ ] Single-run wrapper around EnergyPlus with SQLite output enabled
@@ -116,3 +117,5 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-18 | Safety guardrails adopted (see section above): dedicated GCP project, tool-only agent, least-privilege accounts. |
 | 2026-11-19 | LLM: Groq free tier, `openai/gpt-oss-120b` by default, behind a swappable provider interface. Replaces the earlier Gemini plan, so the separate billing-free Gemini project is dropped; one GCP project is enough. |
 | 2026-11-20 | Keep Claude (and other providers) switchable: one `BEM_LLM_PROVIDER` / `BEM_LLM_MODEL` setting. Claude via Anthropic API key only, not Vertex, so the LLM never needs GCP credentials (guardrail 2). |
+| 2026-11-20 | Write IDF directly (no eppy, which needs the IDD at runtime). HVAC via HVACTemplate + `--expandobjects`; template fields generated from the 25.1 IDD because ExpandObjects ignores defaults. |
+| 2026-11-20 | Simplified geometry: rectangular perimeter/core zones, adiabatic partitions and interior floors. Fine for load and sizing comparisons. |

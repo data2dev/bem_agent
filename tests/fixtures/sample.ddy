@@ -1,0 +1,52 @@
+! Test fixture shaped like an EnergyPlus .ddy file. Values are placeholders for unit
+! tests only; real runs read the .ddy files bundled with EnergyPlus.
+
+ Site:Location,
+  Sample City Intl Ap_IL_USA Design_Conditions,     !- Location Name
+      41.98,     !- Latitude {N+ S-}
+     -87.92,     !- Longitude {W- E+}
+      -6.00,     !- Time Zone Relative to GMT {GMT+/-}
+     201.00;     !- Elevation {m}
+
+ SizingPeriod:DesignDay,
+  Sample City Intl Ap Ann Htg 99.6% Condns DB,     !- Name
+         1,      !- Month
+        21,      !- Day of Month
+  WinterDesignDay,!- Day Type
+     -20.0,      !- Maximum Dry-Bulb Temperature {C}
+       0.0,      !- Daily Dry-Bulb Temperature Range {C}
+ DefaultMultipliers, !- Dry-Bulb Temperature Range Modifier Type
+          ,      !- Dry-Bulb Temperature Range Modifier Day Schedule Name
+  Wetbulb   ,      !- Humidity Condition Type
+     -20.0,      !- Wetbulb or DewPoint at Maximum Dry-Bulb {C}
+          ,      !- Humidity Condition Day Schedule Name
+          ,      !- Humidity Ratio at Maximum Dry-Bulb {kgWater/kgDryAir}
+          ,      !- Enthalpy at Maximum Dry-Bulb {J/kg}
+          ,      !- Daily Wet-Bulb Temperature Range {deltaC}
+    99063.,      !- Barometric Pressure {Pa}
+       4.9,      !- Wind Speed {m/s} design conditions vs. traditional 6.71 m/s (15 mph)
+       270,      !- Wind Direction {Degrees; N=0, S=180}
+        No,      !- Rain {Yes/No}
+        No,      !- Snow on ground {Yes/No}
+        No,      !- Daylight Savings Time Indicator
+  ASHRAEClearSky, !- Solar Model Indicator
+          ,      !- Beam Solar Day Schedule Name
+          ,      !- Diffuse Solar Day Schedule Name
+          ,      !- ASHRAE Clear Sky Optical Depth for Beam Irradiance (taub)
+          ,      !- ASHRAE Clear Sky Optical Depth for Diffuse Irradiance (taud)
+      0.00;      !- Clearness {0.0 to 1.1}
+
+ SizingPeriod:DesignDay,
+  Sample City Intl Ap Ann Htg Wind 99.6% Condns WS=>MCDB,     !- Name
+         1, 21, WinterDesignDay, -10.0, 0.0, DefaultMultipliers, , Wetbulb, -10.0, , , , ,
+    99063., 11.0, 270, No, No, No, ASHRAEClearSky, , , , , 0.00;
+
+ SizingPeriod:DesignDay,
+  Sample City Intl Ap Ann Clg .4% Condns DB=>MWB,     !- Name
+         7, 21, SummerDesignDay, 33.0, 10.0, DefaultMultipliers, , Wetbulb, 23.0, , , , ,
+    99063., 5.0, 230, No, No, No, ASHRAETau, , , 0.45, 2.1;
+
+ SizingPeriod:DesignDay,
+  Sample City Intl Ap Ann Clg 1% Condns DB=>MWB,     !- Name
+         7, 21, SummerDesignDay, 31.0, 10.0, DefaultMultipliers, , Wetbulb, 22.0, , , , ,
+    99063., 5.0, 230, No, No, No, ASHRAETau, , , 0.45, 2.1;
