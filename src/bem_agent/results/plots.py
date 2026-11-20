@@ -34,6 +34,8 @@ METRIC_LABELS = {
     "peak_heating_kw": "Peak heating load (kW)",
     "peak_cooling_w_m2": "Peak cooling load (W/m²)",
     "peak_heating_w_m2": "Peak heating load (W/m²)",
+    "cooling_capacity_kw": "Installed cooling capacity (kW)",
+    "heating_capacity_kw": "Installed heating capacity (kW)",
     "site_eui_kwh_m2": "Site EUI (kWh/m²·yr)",
     "unmet_heating_h": "Unmet heating hours",
     "unmet_cooling_h": "Unmet cooling hours",

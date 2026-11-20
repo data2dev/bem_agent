@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS runs (
     status TEXT, elapsed_s REAL, warnings INTEGER, severe INTEGER,
     peak_cooling_kw REAL, peak_heating_kw REAL,
     peak_cooling_w_m2 REAL, peak_heating_w_m2 REAL,
+    cooling_capacity_kw REAL, heating_capacity_kw REAL,
     site_energy_kwh REAL, site_eui_kwh_m2 REAL,
     unmet_heating_h REAL, unmet_cooling_h REAL,
     loaded_at TEXT DEFAULT (datetime('now'))
@@ -173,6 +174,40 @@ def extract_hourly(src: sqlite3.Connection) -> list[tuple]:
     return out
 
 
+def _capacity_rows(rows: list[tuple], type_prefix: str) -> dict[str, float]:
+    """Design-size capacities (W) per component for types starting with type_prefix."""
+    out: dict[str, float] = {}
+    for comp_type, comp, desc, value, units in rows:
+        if not comp_type.lower().startswith(type_prefix.lower()) or units != "W":
+            continue
+        d = desc.lower()
+        if d.startswith("design size") and ("capacity" in d or "coil load" in d):
+            out.setdefault(comp, value)  # first matching size per component
+    return out
+
+
+def capacity_summary(equipment: list[tuple]) -> dict[str, float | None]:
+    """Installed cooling / heating capacity in kW from autosized components.
+
+    Cooling: chillers if the system has any, else cooling coils (DX or water).
+    Heating: boilers, else heat-pump (DX) heating coils, else other heating coils.
+    These include ventilation air and fan heat, unlike zone design loads, so they
+    are what differs between HVAC systems. Ideal loads has no equipment: None.
+    """
+
+    def first(*prefixes: str) -> float | None:
+        for prefix in prefixes:
+            sizes = _capacity_rows(equipment, prefix)
+            if sizes:
+                return round(sum(sizes.values()) / 1000, 2)
+        return None
+
+    return {
+        "cooling_capacity_kw": first("Chiller:", "Coil:Cooling:"),
+        "heating_capacity_kw": first("Boiler:", "Coil:Heating:DX", "Coil:Heating:"),
+    }
+
+
 def run_row(run_dir: Path) -> dict[str, Any]:
     spec = json.loads((run_dir / "spec.json").read_text())
     record = json.loads((run_dir / "run.json").read_text())
@@ -206,6 +241,8 @@ def run_row(run_dir: Path) -> dict[str, Any]:
         "peak_heating_kw": record.get("peak_heating_kw"),
         "peak_cooling_w_m2": record.get("peak_cooling_w_m2"),
         "peak_heating_w_m2": record.get("peak_heating_w_m2"),
+        "cooling_capacity_kw": None,
+        "heating_capacity_kw": None,
         "site_energy_kwh": round(eui * floor_area, 1) if eui is not None else None,
         "site_eui_kwh_m2": eui,
         "unmet_heating_h": unmet.get("heating"),
@@ -233,6 +270,7 @@ def load_run(run_dir: str | Path, db_path: str | Path) -> dict[str, int]:
             data["equipment_sizing"] = extract_equipment_sizing(src)
             data["end_uses"] = extract_end_uses(src)
             data["hourly"] = extract_hourly(src)
+        row.update(capacity_summary(data["equipment_sizing"]))
 
     with closing(connect(db_path)) as con, con:
         for table in ("runs", *CHILD_TABLES):

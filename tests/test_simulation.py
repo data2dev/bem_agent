@@ -73,11 +73,17 @@ def test_sizing_pipeline(hvac):
     )
     assert zones["rows"] == [["Cooling", 10], ["Heating", 10]]
     equipment = equipment_sizes(DB, run.run_id)
-    print(json.dumps(equipment[:15], indent=1))
+    print(json.dumps(equipment, indent=1))
     if hvac is HVACSystem.VAV:
         types = {e["component_type"].lower() for e in equipment}
         assert any("chiller" in t for t in types), types
         assert any("boiler" in t for t in types), types
+    if hvac is HVACSystem.IDEAL_LOADS:
+        assert "cooling_capacity_kw" not in s
+    else:
+        # equipment also covers ventilation air and fan heat, so it exceeds zone loads
+        assert s["cooling_capacity_kw"] > s["peak_cooling_kw"], s
+        assert s["heating_capacity_kw"] > 0, s
 
 
 def test_annual_run_reports_eui_and_unmet_hours():
@@ -148,5 +154,9 @@ def test_parametric_study_hvac_by_wwr():
             r["window_to_wall_ratio"]: r["peak_cooling_kw"] for r in rows if r["hvac"] == hvac
         }
         assert by_wwr[0.5] > by_wwr[0.2], (hvac, by_wwr)
-    png = plot_study(DB, result.study_id, "peak_cooling_kw", OUT_ROOT / "study_cooling.png")
-    assert png.stat().st_size > 1000
+    # Zone loads don't depend on the HVAC system; installed capacity does.
+    capacity = summary["main_effects"]["HVAC"]["cooling_capacity_kw"]
+    assert set(capacity) == {"VAV", "PTHP"} and capacity["VAV"] != capacity["PTHP"]
+    for metric in ("peak_cooling_kw", "cooling_capacity_kw"):
+        png = plot_study(DB, result.study_id, metric, OUT_ROOT / f"study_{metric}.png")
+        assert png.stat().st_size > 1000
