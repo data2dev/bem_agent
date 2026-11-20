@@ -99,5 +99,5 @@ jobs:
           name: energyplus-outputs
           path: |
             /tmp/eplus-smoke/
-            **/eplusout.err
+            runs/ci/
           if-no-files-found: ignore
