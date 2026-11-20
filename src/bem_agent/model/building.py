@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .constructions import ENVELOPE_PRESETS, Envelope, construction_objects
 from .geometry import Geometry, geometry_objects
@@ -24,7 +24,7 @@ class BuildingSpec(BaseModel):
 
     model_config = ConfigDict(validate_default=True)
 
-    name: str = Field("Building", min_length=1, max_length=60, pattern=r"^[A-Za-z0-9_\- ]+$")
+    name: str = Field("Building", min_length=1, max_length=60, pattern=r"^[^\r\n]+$")
     location: str = Field("chicago", description="City key (see weather.CITIES) or .epw path")
     geometry: Geometry = Field(default_factory=Geometry)
     envelope: Envelope | str = "typical"
@@ -32,6 +32,26 @@ class BuildingSpec(BaseModel):
     schedules: OperatingHours | str = "office"
     hvac: HVACSystem = HVACSystem.IDEAL_LOADS
     run_period: Literal["sizing_only", "annual"] = "sizing_only"
+    presets: dict[str, str] = Field(
+        default_factory=dict,
+        description="Filled automatically: which preset names were used (else 'custom')",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _record_presets(cls, data):
+        if isinstance(data, dict) and not data.get("presets"):
+            defaults = {"envelope": "typical", "loads": "office", "schedules": "office"}
+            data = dict(data)
+            data["presets"] = {
+                key: (
+                    data[key]
+                    if isinstance(data.get(key), str)
+                    else ("custom" if key in data else default)
+                )
+                for key, default in defaults.items()
+            }
+        return data
 
     @field_validator("envelope")
     @classmethod
@@ -57,6 +77,11 @@ def _preset(value, presets: dict, label: str):
     return value
 
 
+def idf_safe(text: str) -> str:
+    """Strip characters that end an IDF field (",", ";") or start a comment ("!")."""
+    return " ".join(text.translate(str.maketrans(",;!", "   ")).split())
+
+
 def simulation_objects(spec: BuildingSpec) -> list[IDFObject]:
     annual = spec.run_period == "annual"
     objects = [
@@ -75,7 +100,16 @@ def simulation_objects(spec: BuildingSpec) -> list[IDFObject]:
         ),
         IDFObject(
             "Building",
-            [spec.name, spec.geometry.orientation_deg, "City", 0.04, 0.4, "FullExterior", 25, 6],
+            [
+                idf_safe(spec.name),
+                spec.geometry.orientation_deg,
+                "City",
+                0.04,
+                0.4,
+                "FullExterior",
+                25,
+                6,
+            ],
         ),
         IDFObject("Timestep", [4]),
         IDFObject("GlobalGeometryRules", ["UpperLeftCorner", "Counterclockwise", "Relative"]),
@@ -98,6 +132,9 @@ def output_objects() -> list[IDFObject]:
         IDFObject("Output:Variable", ["*", "Zone Mean Air Temperature", "Hourly"]),
         IDFObject("Output:Meter", ["Electricity:Facility", "Hourly"]),
         IDFObject("Output:Meter", ["NaturalGas:Facility", "Hourly"]),
+        # Ideal-loads energy is metered as district cooling / heating.
+        IDFObject("Output:Meter", ["DistrictCooling:Facility", "Hourly"]),
+        IDFObject("Output:Meter", ["DistrictHeatingWater:Facility", "Hourly"]),
         IDFObject("Output:Diagnostics", ["DisplayExtraWarnings"]),
     ]
 

@@ -1,8 +1,10 @@
 """Occupancy, lighting, equipment, and thermostat schedules.
 
 Every schedule set is built from operating hours, so presets and custom schedules go
-through the same code. Design days use the weekday profile (peak internal gains for
-cooling sizing) and constant occupied setpoints.
+through the same code. Design days follow standard load-calculation practice: the
+summer design day uses the weekday profile (internal gains add to cooling load), the
+winter design day has no internal gains (the worst heating case is a cold, empty
+building), and both use constant occupied setpoints.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ ACTIVITY = "Activity_Level"
 ALWAYS_ON = "Always_On"
 
 Hours = tuple[int, int] | None
+NO_GAINS: DayProfile = [(24, 0.0)]
 
 
 def _check_hours(v: Hours) -> Hours:
@@ -137,9 +140,15 @@ def schedule_objects(hours: OperatingHours) -> list[IDFObject]:
         IDFObject("ScheduleTypeLimits", ["Fraction", 0.0, 1.0, "Continuous"]),
         IDFObject("ScheduleTypeLimits", ["Temperature", -60.0, 200.0, "Continuous", "Temperature"]),
         IDFObject("ScheduleTypeLimits", ["Any Number"]),
-        compact_schedule(OCCUPANCY, "Fraction", *profiles(*hours.occupancy)),
-        compact_schedule(LIGHTING, "Fraction", *profiles(*hours.lighting)),
-        compact_schedule(EQUIPMENT, "Fraction", *profiles(*hours.equipment)),
+        compact_schedule(
+            OCCUPANCY, "Fraction", *profiles(*hours.occupancy), winter_design_day=NO_GAINS
+        ),
+        compact_schedule(
+            LIGHTING, "Fraction", *profiles(*hours.lighting), winter_design_day=NO_GAINS
+        ),
+        compact_schedule(
+            EQUIPMENT, "Fraction", *profiles(*hours.equipment), winter_design_day=NO_GAINS
+        ),
         compact_schedule(
             HEATING_SP,
             "Temperature",
