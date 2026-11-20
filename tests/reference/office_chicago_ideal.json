@@ -17,6 +17,7 @@
     "envelope": {
       "wall_insulation_r_si": 2.3,
       "roof_insulation_r_si": 4.4,
+      "slab_insulation_r_si": 1.76,
       "window_u_si": 2.4,
       "window_shgc": 0.38,
       "window_vt": 0.5
@@ -60,12 +61,17 @@
       "hvac_lead_hours": 2
     },
     "hvac": "ideal_loads",
-    "run_period": "sizing_only"
+    "run_period": "sizing_only",
+    "presets": {
+      "envelope": "typical",
+      "loads": "office",
+      "schedules": "office"
+    }
   },
   "expected": {
-    "peak_cooling_kw": 119.5,
-    "peak_heating_kw": 136.8,
-    "peak_cooling_w_m2": 26.6,
-    "peak_heating_w_m2": 30.4
+    "peak_cooling_kw": 144.1,
+    "peak_heating_kw": 145.6,
+    "peak_cooling_w_m2": 32.0,
+    "peak_heating_w_m2": 32.4
   }
 }
