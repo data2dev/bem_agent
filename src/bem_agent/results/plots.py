@@ -34,16 +34,18 @@ METRIC_LABELS = {
     "peak_heating_kw": "Peak heating load (kW)",
     "peak_cooling_w_m2": "Peak cooling load (W/m²)",
     "peak_heating_w_m2": "Peak heating load (W/m²)",
+    "cooling_capacity_kw": "Installed cooling capacity (kW)",
+    "heating_capacity_kw": "Installed heating capacity (kW)",
     "site_eui_kwh_m2": "Site EUI (kWh/m²·yr)",
     "unmet_heating_h": "Unmet heating hours",
     "unmet_cooling_h": "Unmet cooling hours",
 }
 
 
-def _style(ax, title: str, ylabel: str) -> None:
+def _style(ax, title: str, ylabel: str, legend_above: bool = False) -> None:
     ax.set_facecolor(SURFACE)
     ax.figure.set_facecolor(SURFACE)
-    ax.set_title(title, loc="left", color=TEXT, fontsize=12, pad=26)
+    ax.set_title(title, loc="left", color=TEXT, fontsize=12, pad=26 if legend_above else 12)
     ax.set_ylabel(ylabel, color=TEXT_SECONDARY, fontsize=9)
     ax.tick_params(colors=TEXT_SECONDARY, labelsize=8, length=0)
     for side in ("top", "right", "left"):
@@ -163,7 +165,7 @@ def plot_timeseries(
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel(xlabel, color=TEXT_SECONDARY, fontsize=9)
     agg_word = "total" if units == "kWh" else "mean"
-    _style(ax, f"{variable} ({freq} {agg_word})", UNIT_LABELS.get(units, units))
+    _style(ax, f"{variable} ({freq} {agg_word})", UNIT_LABELS.get(units, units), len(runs) >= 2)
     _legend(ax, len(runs))
     fig.tight_layout()
     out = Path(out)
@@ -171,4 +173,46 @@ def plot_timeseries(
     fig.savefig(out)
     plt.close(fig)
     _write_csv(out, ["run_id", "label", "period", "value", "units"], table)
+    return out
+
+
+def plot_study(db_path: Path, study_id: str, metric: str, out: Path) -> Path:
+    """Horizontal bars, one per study case, sorted by the metric (lowest first).
+
+    A single series (every bar is the same quantity), so one color and no legend; case
+    labels sit on the axis. Scales to every case a study can have.
+    """
+    from .queries import study_table
+
+    if metric not in METRIC_LABELS:
+        raise QueryError(f"metric must be one of {list(METRIC_LABELS)}")
+    rows = [r for r in study_table(db_path, study_id) if r.get(metric) is not None]
+    if not rows:
+        raise QueryError(f"No completed cases with {metric} (EUI/unmet hours need annual runs)")
+    rows.sort(key=lambda r: r[metric], reverse=True)  # barh draws bottom-up: lowest on top
+    labels = [r["label"] for r in rows]
+    values = [r[metric] for r in rows]
+    fig, ax = plt.subplots(figsize=(7.5, 1.0 + 0.38 * len(rows)), dpi=150)
+    bars = ax.barh(
+        range(len(rows)), values, height=0.62, color=SERIES[0], edgecolor=SURFACE, linewidth=2
+    )
+    ax.bar_label(bars, labels=[f"{v:,.1f}" for v in values], fontsize=8, color=TEXT, padding=3)
+    ax.set_yticks(range(len(rows)), labels)
+    _style(ax, METRIC_LABELS[metric], "")
+    ax.grid(axis="y", visible=False)
+    ax.grid(axis="x", color=GRID, linewidth=0.8)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["left"].set_color(GRID)
+    ax.margins(x=0.12)
+    fig.tight_layout()
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out)
+    plt.close(fig)
+    _write_csv(
+        out,
+        ["case", "label", "run_id", metric],
+        [[r["case"], r["label"], r["run_id"], r[metric]] for r in rows],
+    )
     return out

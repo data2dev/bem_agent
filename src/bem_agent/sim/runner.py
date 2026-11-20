@@ -65,15 +65,19 @@ def run_energyplus(
 ) -> RunResult:
     """Run EnergyPlus without a shell; never raises on simulation failure."""
     exe = find_energyplus()
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [str(exe), "--weather", str(epw), "--output-directory", str(out_dir)]
+    cmd = [str(exe), "--weather", str(Path(epw).resolve()), "--output-directory", str(out_dir)]
     if expand_objects:
         cmd.append("--expandobjects")
-    cmd.append(str(idf))
+    cmd.append(str(Path(idf).resolve()))
     start = time.monotonic()
     timed_out = False
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+        # cwd = the run folder: ExpandObjects writes temporary files (in.idf,
+        # expanded.idf) to the working directory, so parallel runs sharing one
+        # directory would collide.
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, cwd=out_dir)
         returncode: int | None = proc.returncode
         console = proc.stdout + proc.stderr
     except subprocess.TimeoutExpired as exc:

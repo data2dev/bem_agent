@@ -96,6 +96,16 @@ jobs:
       - name: Simulation and regression tests
         run: pytest -m energyplus -v -rP
 
+      - name: Upload charts from the simulation tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charts
+          path: |
+            runs/ci/*.png
+            runs/ci/*.csv
+          if-no-files-found: ignore
+
       - name: Upload simulation outputs on failure
         if: failure()
         uses: actions/upload-artifact@v4

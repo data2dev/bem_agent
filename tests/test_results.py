@@ -185,6 +185,49 @@ def test_etl_transforms(db):
     assert keys == {"F1_CORE", "F1_SOUTH"}
 
 
+def test_capacity_summary():
+    from bem_agent.results.etl import capacity_summary
+
+    chiller_plant = [
+        ("Chiller:Electric:EIR", "CHILLER", "Design Size Reference Capacity", 150000.0, "W"),
+        ("Chiller:Electric:EIR", "CHILLER", "User-Specified Reference Capacity", 1.0, "W"),
+        ("Coil:Cooling:Water", "AHU COIL", "Design Size Design Coil Load", 140000.0, "W"),
+        ("Boiler:HotWater", "BOILER", "Design Size Nominal Capacity", 90000.0, "W"),
+        ("Coil:Heating:Water", "F1 REHEAT", "Design Size Rated Capacity", 5000.0, "W"),
+        ("Fan:VariableVolume", "FAN", "Design Size Maximum Flow Rate", 5.0, "m3/s"),
+    ]
+    assert capacity_summary(chiller_plant) == {
+        "cooling_capacity_kw": 150.0,
+        "heating_capacity_kw": 90.0,
+    }
+    pthp = [
+        (
+            "Coil:Cooling:DX:SingleSpeed",
+            "Z1 COOL",
+            "Design Size Gross Rated Total Cooling Capacity",
+            10000.0,
+            "W",
+        ),
+        (
+            "Coil:Cooling:DX:SingleSpeed",
+            "Z2 COOL",
+            "Design Size Gross Rated Total Cooling Capacity",
+            12000.0,
+            "W",
+        ),
+        (
+            "Coil:Heating:DX:SingleSpeed",
+            "Z1 HP",
+            "Design Size Gross Rated Heating Capacity",
+            9000.0,
+            "W",
+        ),
+        ("Coil:Heating:Electric", "Z1 SUPP", "Design Size Nominal Capacity", 15000.0, "W"),
+    ]
+    assert capacity_summary(pthp) == {"cooling_capacity_kw": 22.0, "heating_capacity_kw": 9.0}
+    assert capacity_summary([]) == {"cooling_capacity_kw": None, "heating_capacity_kw": None}
+
+
 def test_reload_replaces_rows(tmp_path, db):
     load_run(tmp_path / "run_a", db)
     con = sqlite3.connect(db)
@@ -206,6 +249,8 @@ def test_compare_runs(db):
     rows = compare_runs(db, ["run_b", "run_a"])
     assert [r["run_id"] for r in rows] == ["run_b", "run_a"]  # caller's order kept
     assert rows[0]["peak_cooling_kw"] == 15.0
+    assert rows[1]["cooling_capacity_kw"] == 120.0  # chiller in the fake eplusout.sql
+    assert rows[1]["heating_capacity_kw"] == 90.0
     sorted_rows = compare_runs(db, ["run_b", "run_a"], sort_by="site_eui_kwh_m2")
     assert [r["run_id"] for r in sorted_rows] == ["run_a", "run_b"]
     with pytest.raises(QueryError, match="Unknown"):
