@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 3 done (in review); next is Phase 4
-- **Done:** Phases 0-2 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 3 results ETL (PR #7), all EnergyPlus tests green in CI
-- **Next:** Phase 4 (parametric runs: case matrix, batch runner, comparison)
+- **Phase:** 4 done (in review); next is Phase 5
+- **Done:** Phases 0-3 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 4 parametric studies (PR #8), all EnergyPlus tests green in CI
+- **Next:** Phase 5 (MCP server and agent loop)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -76,7 +76,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Post-run checks: clean completion, SQLite written, every zone sized, peak load density, EUI and unmet hours (annual runs)
 - [x] `simulate()`: validate → build → run → check; one folder per run under `$BEM_RUNS_DIR` with `spec.json`, `model.idf`, outputs, `run.json`; compact summary for the LLM
 - [x] Reference case and regression test (`tests/reference/office_chicago_ideal.json`, ±2%; regenerate with `scripts/update_reference.py`)
-- Note: ideal-loads peaks are zone sensible loads without ventilation air; equipment systems (VAV, PTHP) include outdoor air in sizing
+- Note: peak loads are zone design loads (what the rooms need), so they are the same for every HVAC system and exclude ventilation air. Installed equipment capacity (Phase 4) includes ventilation air and fan heat and is what differs between systems
 
 ### Phase 3: Results, ETL and analysis
 - [x] Extract peak heating and cooling loads per zone and autosized equipment capacities (`ComponentSizes`)
@@ -87,9 +87,11 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - Modeling fixes found by the post-run checks while testing: winter design day now has no internal gains (standard heating-load practice); ground-floor slab is insulated. Reference values regenerated for both
 
 ### Phase 4: Parametric runs
-- [ ] Case-matrix builder (e.g. systems × WWR × orientation)
-- [ ] Batch runner (parallel where possible), each case validated
-- [ ] Comparison table and summary across cases
+- [x] Case-matrix builder: base building + whitelisted parameters (HVAC, WWR, orientation, envelope/loads/schedule presets or single values, ...), every combination, up to 48 cases. Every case is validated before any simulation starts
+- [x] Batch runner: cases run in parallel (threads around EnergyPlus subprocesses, each in its own folder); results loaded into SQLite from one thread; a failing case never stops the others
+- [x] Comparison: `studies` / `study_cases` tables, `study_table`, study summary with best case per metric and main effects (mean of each metric per parameter value), `plot_study` sorted bar chart
+- [x] Installed cooling / heating capacity per run from autosized equipment (chiller or cooling coils; boiler or heating coils), since zone loads alone can't tell HVAC systems apart
+- Bug found by the parallel CI study: EnergyPlus's ExpandObjects writes `in.idf` to the working directory, so parallel runs collided. Each run now executes inside its own folder
 
 ### Phase 5: MCP server and agent
 - [ ] MCP server exposing tools: `create_building`, `set_schedules`, `set_hvac_system`, `run_simulation`, `run_parametric`, `get_loads`, `get_equipment_sizes`, `query_results`, `plot_timeseries`
@@ -130,3 +132,5 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Ideal-loads models get explicit `Sizing:Zone` objects (the template creates none). Caught by the post-run `ZONES_NOT_SIZED` check. |
 | 2026-11-20 | Results live in one SQLite `results.db`; the agent gets read-only SQL over it. Charts are static PNG + CSV so any MCP client can show them. |
 | 2026-11-20 | Winter design day without internal gains; insulated slab. Both changed the regression reference on purpose. |
+| 2026-11-20 | Parametric studies vary only whitelisted parameters (max 48 cases) and validate every case up front. Parallel runs via threads; SQLite written from one thread. |
+| 2026-11-20 | Compare HVAC systems on installed capacity and annual energy, not zone peak loads (which are system-independent). |
