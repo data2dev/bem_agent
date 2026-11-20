@@ -54,7 +54,8 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] CI: GitHub Actions running lint, unit tests, and an EnergyPlus smoke test + simulation tests
 - [x] `.gitignore`
 - [x] Check Docker on the local PC (works, but we won't use it)
-- [ ] `.env.example` (for `GROQ_API_KEY`), license
+- [x] `.env.example`
+- [ ] License
 - [ ] Create a Groq account and API key
 - [ ] Create `bem-agent-demo` with budget alert, Artifact Registry, GCS bucket, Secret Manager (`GROQ_API_KEY`), Workload Identity Federation for GitHub
 
@@ -86,8 +87,9 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 ### Phase 5: MCP server and agent
 - [ ] MCP server exposing tools: `create_building`, `set_schedules`, `set_hvac_system`, `run_simulation`, `run_parametric`, `get_loads`, `get_equipment_sizes`, `query_results`, `plot_timeseries`
 - [ ] Clear tool descriptions and error messages the LLM can recover from
-- [ ] CLI agent loop with tool calling via Groq (OpenAI-compatible API); provider and model set by config
-- [ ] Stay within Groq's free-tier limits: compact tool outputs (summaries and run IDs, not raw tables), history trimming, retry with backoff on HTTP 429
+- [x] Provider-agnostic LLM layer (`bem_agent.llm`): Groq default; Claude, Gemini, OpenAI, any OpenAI-compatible server by config; retry with backoff on HTTP 429
+- [ ] CLI agent loop with tool calling on top of `bem_agent.llm`
+- [ ] Stay within Groq's free-tier limits: compact tool outputs (summaries and run IDs, not raw tables), history trimming
 - [ ] Compare `gpt-oss-120b` and `llama-3.3-70b-versatile` on the same prompt set (task completion, malformed tool calls, tokens used) and pick the default
 - [ ] Example prompts and a recorded end-to-end transcript for the README
 - [ ] Optional: connect the Cloud Run MCP server to claude.ai as a custom connector
@@ -113,3 +115,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-18 | No local PC: everything runs on GCP (Cloud Run service for the MCP server, Cloud Run jobs for batches, GCS for outputs). |
 | 2026-11-18 | Safety guardrails adopted (see section above): dedicated GCP project, tool-only agent, least-privilege accounts. |
 | 2026-11-19 | LLM: Groq free tier, `openai/gpt-oss-120b` by default, behind a swappable provider interface. Replaces the earlier Gemini plan, so the separate billing-free Gemini project is dropped; one GCP project is enough. |
+| 2026-11-20 | Keep Claude (and other providers) switchable: one `BEM_LLM_PROVIDER` / `BEM_LLM_MODEL` setting. Claude via Anthropic API key only, not Vertex, so the LLM never needs GCP credentials (guardrail 2). |
