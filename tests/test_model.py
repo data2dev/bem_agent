@@ -162,6 +162,18 @@ def test_compact_schedule_covers_all_day_types():
     ]
 
 
+def test_winter_design_day_has_no_internal_gains():
+    from bem_agent.model.schedules import schedule_objects
+
+    by_name = {o.name: o.fields for o in schedule_objects(OperatingHours())}
+    for name in ("Occupancy", "Lighting", "Equipment"):
+        f = by_name[name]
+        i = f.index("For: WinterDesignDay")
+        assert f[i + 1 : i + 3] == ["Until: 24:00", 0.0]
+        j = f.index("For: SummerDesignDay")
+        assert f[j + 1 : j + 3] != ["Until: 24:00", 0.0]
+
+
 def test_operating_hours_validation():
     with pytest.raises(ValidationError):
         OperatingHours(weekdays=(18, 8))
