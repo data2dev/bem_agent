@@ -59,8 +59,12 @@ def test_sizing_pipeline(hvac):
     # ETL: the run and its zone sizing landed in results.db
     row = compare_runs(DB, [run.run_id])[0]
     assert row["peak_cooling_kw"] == s["peak_cooling_kw"]
-    zones = run_sql(DB, f"SELECT COUNT(*) FROM zone_sizing WHERE run_id = '{run.run_id}'")
-    assert zones["rows"][0][0] == 20  # 10 zones x heating/cooling
+    zones = run_sql(
+        DB,
+        "SELECT load_type, COUNT(*) FROM zone_sizing "
+        f"WHERE run_id = '{run.run_id}' GROUP BY load_type ORDER BY load_type",
+    )
+    assert zones["rows"] == [["Cooling", 10], ["Heating", 10]]
     equipment = equipment_sizes(DB, run.run_id)
     print(json.dumps(equipment[:15], indent=1))
     if hvac is HVACSystem.VAV:
