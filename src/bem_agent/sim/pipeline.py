@@ -94,7 +94,8 @@ def simulate(
         return _finish(result, base_dir, load_results)
 
     weather = resolve_weather(spec.location)
-    idf = write_idf(spec, out_dir / "in.idf", site_objects=weather.site_objects())
+    # Not "in.idf": EnergyPlus creates its own in.idf link in the run folder.
+    idf = write_idf(spec, out_dir / "model.idf", site_objects=weather.site_objects())
     result.run = run_energyplus(idf, weather.epw, out_dir, timeout_s=timeout_s)
     result.post = check_run(result.run)
     if result.post.ok:
