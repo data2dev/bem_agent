@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 4 done (in review); next is Phase 5
-- **Done:** Phases 0-3 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 4 parametric studies (PR #8), all EnergyPlus tests green in CI
-- **Next:** Phase 5 (MCP server and agent loop)
+- **Phase:** 5 done (in review) except a recorded live-LLM transcript; next is Phase 6
+- **Done:** Phases 0-4 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 5 MCP server + agent loop (PR #9), all EnergyPlus tests green in CI
+- **Next:** first live agent session on Groq (Cloud Shell, or add a `GROQ_API_KEY` GitHub secret for the CI live test); then Phase 6 (Docker, Cloud Run deploy)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -94,14 +94,16 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - Bug found by the parallel CI study: EnergyPlus's ExpandObjects writes `in.idf` to the working directory, so parallel runs collided. Each run now executes inside its own folder
 
 ### Phase 5: MCP server and agent
-- [ ] MCP server exposing tools: `create_building`, `set_schedules`, `set_hvac_system`, `run_simulation`, `run_parametric`, `get_loads`, `get_equipment_sizes`, `query_results`, `plot_timeseries`
-- [ ] Clear tool descriptions and error messages the LLM can recover from
 - [x] Provider-agnostic LLM layer (`bem_agent.llm`): Groq default; Claude, Gemini, OpenAI, any OpenAI-compatible server by config; retry with backoff on HTTP 429
-- [ ] CLI agent loop with tool calling on top of `bem_agent.llm`
-- [ ] Stay within Groq's free-tier limits: compact tool outputs (summaries and run IDs, not raw tables), history trimming
-- [ ] Compare `gpt-oss-120b` and `llama-3.3-70b-versatile` on the same prompt set (task completion, malformed tool calls, tokens used) and pick the default
-- [ ] Example prompts and a recorded end-to-end transcript for the README
-- [ ] Optional: connect the Cloud Run MCP server to claude.ai as a custom connector
+- [x] Tool registry (`bem_agent.tools`), shared by the MCP server and the agent: `list_options`, `run_simulation`, `run_parametric_study`, `get_run_details`, `compare_runs`, `get_timeseries`, `query_results`, `make_chart`, `list_history`
+- [x] Tool schemas kept to ~1.5K tokens; results are compact JSON capped at 4K characters; errors go back to the model as `{"error": ...}`
+- [x] Guardrails in code: validation before any run, bundled locations only (no model-chosen file paths), read-only SQL, per-session simulation budget (invalid runs refunded)
+- [x] MCP server (`bem-mcp`): stdio or streamable HTTP; charts returned as images; simulations run off the event loop
+- [x] Agent loop + CLI (`bem-agent`): token-budget history trimming (shorten old results, then drop oldest exchanges), step limit with a forced final answer, interactive follow-ups, transcripts saved
+- [x] Tests: scripted-LLM agent tests, in-process MCP client tests; in CI the agent runs a real study and the MCP server a real simulation
+- [x] `scripts/install_energyplus.sh` (used by CI; works in Cloud Shell)
+- [ ] First live session on Groq; record a transcript for the README
+- [ ] Optional: connect the Cloud Run MCP server to claude.ai as a custom connector for the live demo
 
 ### Phase 6: Packaging and CI/CD
 - [ ] Dockerfile: EnergyPlus + `bem_agent`
@@ -134,3 +136,5 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Winter design day without internal gains; insulated slab. Both changed the regression reference on purpose. |
 | 2026-11-20 | Parametric studies vary only whitelisted parameters (max 48 cases) and validate every case up front. Parallel runs via threads; SQLite written from one thread. |
 | 2026-11-20 | Compare HVAC systems on installed capacity and annual energy, not zone peak loads (which are system-independent). |
+
+| 2026-11-21 | One tool registry for both MCP and the agent loop. Tools accept only bundled locations, so the model never chooses file paths. |
