@@ -72,6 +72,33 @@ bem-agent                       # interactive; follow-up questions keep the cont
 
 Each step is printed as it happens, and the full transcript is saved under `runs/transcripts/`.
 
+Example session (Groq `openai/gpt-oss-120b`, free tier, run in Cloud Shell):
+
+```text
+$ bem-agent "Compare VAV and packaged heat pumps for a 3-story, 30,000 ft2 office in
+  Washington DC at 30% and 50% window-to-wall ratio. Which needs less cooling capacity?"
+[groq / openai/gpt-oss-120b]  runs: runs
+  → run_parametric_study({"base":{"floor_area_m2":2790,"location":"washington_dc",
+      "num_floors":3,...},"parameters":{...}})
+    ✓ study_id=study_20261121T055240_904ae8
+
+| WWR  | HVAC                 | Cooling capacity | Run ID                             |
+|------|----------------------|------------------|------------------------------------|
+| 30 % | VAV (chiller-boiler) | 165.5 kW (47.1 t)| 20261121T055240_wwr-30-vav_583519  |
+| 30 % | Packaged heat pump   | 158.8 kW (45.2 t)| 20261121T055240_wwr-30-pthp_6f8a71 |
+| 50 % | VAV (chiller-boiler) | 190.9 kW (54.3 t)| 20261121T055240_wwr-50-vav_d6e2c5  |
+| 50 % | Packaged heat pump   | 185.2 kW (52.7 t)| 20261121T055240_wwr-50-pthp_b0b59f |
+
+For both window-to-wall ratios the packaged heat-pump system requires the smaller
+cooling capacity ...
+
+[2 LLM calls, 1 tool calls, 4,489 in / 1,157 out tokens]
+```
+
+The model converted ft² to m² itself, chose one parametric study over four single runs,
+and quoted only numbers from the tool result. (Answer abbreviated; the full session is
+four EnergyPlus runs in parallel, about a minute.)
+
 ### Or use the tools from any MCP client
 
 ```bash

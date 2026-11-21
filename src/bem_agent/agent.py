@@ -49,8 +49,11 @@ HVAC systems use cooling_capacity_kw / heating_capacity_kw, and annual energy (E
 run_period="annual" runs.
 - To compare several options, use one run_parametric_study instead of many single runs.
 - Use few tool calls. Reuse run_ids instead of re-running.
+- Interpret, don't just rank: say how big a difference is (in %), and call differences \
+under about 5% roughly equal. Central plant capacity (chiller, boiler) and the sum of \
+per-zone units (PTHP) are sized differently; mention it when comparing them.
 - Finish with a short answer: the key numbers, the run_id or study_id they came from, \
-and any assumptions or warnings.
+and the main assumptions (presets used, sizing-only vs annual) and any warnings.
 """
 
 CHARS_PER_TOKEN = 3.5
