@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 5 done (in review) except a recorded live-LLM transcript; next is Phase 6
-- **Done:** Phases 0-4 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`). In review: Phase 5 MCP server + agent loop (PR #9), all EnergyPlus tests green in CI
-- **Next:** first live agent session on Groq (Cloud Shell, or add a `GROQ_API_KEY` GitHub secret for the CI live test); then Phase 6 (Docker, Cloud Run deploy)
+- **Phase:** 5 done; next is Phase 6
+- **Done:** Phases 0-5 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`); first live agent session on Groq from Cloud Shell (see README)
+- **Next:** Phase 6 (Dockerfile, CI image build, deploy the MCP server to Cloud Run)
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -102,7 +102,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Agent loop + CLI (`bem-agent`): token-budget history trimming (shorten old results, then drop oldest exchanges), step limit with a forced final answer, interactive follow-ups, transcripts saved
 - [x] Tests: scripted-LLM agent tests, in-process MCP client tests; in CI the agent runs a real study and the MCP server a real simulation
 - [x] `scripts/install_energyplus.sh` (used by CI; works in Cloud Shell)
-- [ ] First live session on Groq; record a transcript for the README
+- [x] First live session on Groq (Cloud Shell); example recorded in the README. Answer quality follow-up: the system prompt now asks for % differences and the sizing basis of each system
 - [ ] Optional: connect the Cloud Run MCP server to claude.ai as a custom connector for the live demo
 
 ### Phase 6: Packaging and CI/CD
@@ -137,3 +137,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Parametric studies vary only whitelisted parameters (max 48 cases) and validate every case up front. Parallel runs via threads; SQLite written from one thread. |
 | 2026-11-20 | Compare HVAC systems on installed capacity and annual energy, not zone peak loads (which are system-independent). |
 | 2026-11-21 | One tool registry for both MCP and the agent loop. Tools accept only bundled locations, so the model never chooses file paths. |
+| 2026-11-21 | Groq key in Secret Manager had a terminal escape code from the hidden prompt (bare HTTP 400). Keys are now cleaned in code and in `gcp_setup.sh`; secret version 2 is the clean key. |
