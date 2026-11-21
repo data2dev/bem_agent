@@ -9,7 +9,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .base import LLMClient, LLMResponse, Message, ToolCall, ToolSpec, Usage
+from .base import (
+    LLMClient,
+    LLMRequestError,
+    LLMResponse,
+    Message,
+    ToolCall,
+    ToolSpec,
+    ToolUseFailed,
+    Usage,
+)
 
 
 class OpenAICompatibleClient(LLMClient):
@@ -53,8 +62,39 @@ class OpenAICompatibleClient(LLMClient):
         }
         if tools:
             kwargs["tools"] = to_openai_tools(tools)
-        completion = self._client.chat.completions.create(**kwargs)
+        try:
+            completion = self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if self._rate_limit_errors and isinstance(exc, self._rate_limit_errors):
+                raise
+            status = getattr(exc, "status_code", None)
+            if status is None or not 400 <= status < 500:
+                raise
+            raise request_error(self.provider, status, exc) from exc
         return from_openai_completion(completion)
+
+
+def _error_body(exc: Exception) -> dict[str, Any]:
+    """The provider's error object, from the parsed body or the raw response."""
+    body = getattr(exc, "body", None)
+    if not isinstance(body, dict):
+        response = getattr(exc, "response", None)
+        try:
+            body = json.loads(response.text) if response is not None else None
+        except (ValueError, AttributeError):
+            text = getattr(response, "text", "") if response is not None else ""
+            body = {"message": text or str(exc)}
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        body = body["error"]
+    return body if isinstance(body, dict) else {"message": str(exc)}
+
+
+def request_error(provider: str, status: int, exc: Exception) -> LLMRequestError:
+    body = _error_body(exc)
+    message = str(body.get("message") or exc)
+    if body.get("code") == "tool_use_failed":
+        return ToolUseFailed(provider, message, str(body.get("failed_generation") or ""))
+    return LLMRequestError(provider, status, message, body.get("code"))
 
 
 def to_openai_tools(tools: list[ToolSpec]) -> list[dict[str, Any]]:
