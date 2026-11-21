@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,16 +72,21 @@ class LLMConfigError(ValueError):
     pass
 
 
-def clean_api_key(value: str | None) -> str | None:
-    """Drop whitespace and quotes that ride along when a key is pasted or stored.
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z~]|\x1b.")
 
-    A stray newline or quote makes the Authorization header invalid, and some
-    providers then answer with a bare HTTP 400 that doesn't mention the key.
+
+def clean_api_key(value: str | None) -> str | None:
+    """Drop characters that ride along when a key is pasted or typed into a terminal.
+
+    Whitespace, quotes and terminal escape codes (an arrow key at a hidden prompt
+    records ESC [ A) make the Authorization header invalid, and some providers then
+    answer with a bare HTTP 400 that doesn't mention the key.
     """
     if value is None:
         return None
-    cleaned = "".join(ch for ch in value if not ch.isspace()).strip("\"'")
-    return cleaned or None
+    value = _ANSI_ESCAPE.sub("", value)
+    cleaned = "".join(ch for ch in value if ch.isprintable() and not ch.isspace())
+    return cleaned.strip("\"'") or None
 
 
 def get_client(

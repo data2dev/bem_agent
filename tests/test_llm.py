@@ -292,6 +292,8 @@ def test_api_key_is_cleaned(clean_env):
 
     assert clean_api_key(' "gsk_abc123"\r\n') == "gsk_abc123"
     assert clean_api_key("  ") is None
+    assert clean_api_key("gsk_abc123\x1b[A") == "gsk_abc123"  # arrow key at the prompt
+    assert clean_api_key("\x1b[200~gsk_abc123\x1b[201~") == "gsk_abc123"  # bracketed paste
     clean_env.setenv("GROQ_API_KEY", "gsk_abc123\r\n ")
     client = get_client("groq")
     assert client._client.api_key == "gsk_abc123"
