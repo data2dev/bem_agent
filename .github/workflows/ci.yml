@@ -12,7 +12,6 @@ concurrency:
 
 env:
   ENERGYPLUS_TAG: v25.1.0
-  ENERGYPLUS_ASSET_PATTERN: "*Linux-Ubuntu22.04-x86_64.tar.gz"
 
 jobs:
   lint-and-test:
@@ -61,17 +60,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/energyplus
-          key: energyplus-${{ env.ENERGYPLUS_TAG }}-ubuntu22.04
+          key: energyplus-${{ env.ENERGYPLUS_TAG }}-ubuntu22.04-v2
 
       - name: Download EnergyPlus
         if: steps.eplus-cache.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p ~/energyplus /tmp/eplus-dl
-          gh release download "$ENERGYPLUS_TAG" -R NREL/EnergyPlus \
-            -p "$ENERGYPLUS_ASSET_PATTERN" -D /tmp/eplus-dl
-          tar -xzf /tmp/eplus-dl/*.tar.gz -C ~/energyplus --strip-components=1
+        run: bash scripts/install_energyplus.sh ~/energyplus
 
       - name: Add EnergyPlus to PATH
         run: |
@@ -94,6 +89,9 @@ jobs:
         run: python scripts/update_reference.py --print-only
 
       - name: Simulation and regression tests
+        env:
+          # Optional: add a GROQ_API_KEY repository secret to also run one live LLM test.
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest -m energyplus -v -rP
 
       - name: Upload charts from the simulation tests

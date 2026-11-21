@@ -51,21 +51,64 @@ EnergyPlus  +  results.db (SQLite)
 
 ## Quick start
 
-> Setup instructions will be filled in as the components land. The intended flow:
+Works anywhere with Linux x86_64 and Python 3.11+. Google Cloud Shell is a free option
+that needs nothing on your own machine.
 
 ```bash
-# Run everything in Docker (EnergyPlus included)
-docker build -t bem_agent .
-docker run -it -e GROQ_API_KEY=... bem_agent "Size HVAC for a 2-story office in Chicago"
-
-# Or connect the MCP server to an MCP client such as Claude Desktop
-python -m bem_agent.server
+git clone https://github.com/data2dev/bem_agent && cd bem_agent
+bash scripts/install_energyplus.sh ~/energyplus        # EnergyPlus 25.1, ~2 minutes
+export ENERGYPLUS_DIR=~/energyplus PATH=~/energyplus:$PATH
+python3 -m venv .venv && . .venv/bin/activate && pip install -e .
+export GROQ_API_KEY=...                                  # free key from console.groq.com
 ```
 
-You'll need one of:
+### Ask the agent
 
-- a free **Groq API key**, to run the built-in agent loop, or
-- an **MCP-capable app** (e.g. Claude Desktop), to call the tools directly.
+```bash
+bem-agent "Compare VAV and packaged heat pumps for a 3-story, 30,000 ft2 office in \
+Washington DC at 30% and 50% window-to-wall ratio. Which needs less cooling capacity?"
+bem-agent                       # interactive; follow-up questions keep the context
+```
+
+Each step is printed as it happens, and the full transcript is saved under `runs/transcripts/`.
+
+### Or use the tools from any MCP client
+
+```bash
+bem-mcp                          # stdio, e.g. Claude Desktop
+bem-mcp --http --port 8080       # streamable HTTP at http://localhost:8080/mcp
+```
+
+Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "bem_agent": {
+      "command": "/path/to/bem_agent/.venv/bin/bem-mcp",
+      "env": { "ENERGYPLUS_DIR": "/path/to/energyplus", "BEM_RUNS_DIR": "/path/to/runs" }
+    }
+  }
+}
+```
+
+### Tools
+
+| Tool | What it does |
+|---|---|
+| `list_options` | Locations, HVAC systems, presets, study parameters, units |
+| `run_simulation` | Validate, build and run one model; peak loads, installed capacity, EUI |
+| `run_parametric_study` | Every combination of options in parallel; best case and main effects |
+| `get_run_details` | Issues, zone loads, equipment sizes or end uses for one run |
+| `compare_runs` | Several runs side by side |
+| `get_timeseries` | Daily / monthly energy and temperatures from annual runs |
+| `query_results` | Read-only SQL over the results database |
+| `make_chart` | PNG chart + CSV (returned as an image over MCP) |
+| `list_history` | Earlier runs and studies |
+
+Guardrails are enforced in code, not left to the model: inputs are validated before
+anything runs, locations are limited to bundled weather files, SQL is read-only, and
+each session has a simulation budget (`BEM_MAX_SIMULATIONS`, default 60).
 
 ## Choosing the LLM
 
