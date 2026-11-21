@@ -71,6 +71,18 @@ class LLMConfigError(ValueError):
     pass
 
 
+def clean_api_key(value: str | None) -> str | None:
+    """Drop whitespace and quotes that ride along when a key is pasted or stored.
+
+    A stray newline or quote makes the Authorization header invalid, and some
+    providers then answer with a bare HTTP 400 that doesn't mention the key.
+    """
+    if value is None:
+        return None
+    cleaned = "".join(ch for ch in value if not ch.isspace()).strip("\"'")
+    return cleaned or None
+
+
 def get_client(
     provider: str | None = None,
     model: str | None = None,
@@ -91,7 +103,7 @@ def get_client(
     if not model:
         raise LLMConfigError(f"Provider {name!r} has no default model; set BEM_LLM_MODEL.")
 
-    api_key = api_key or os.environ.get(preset.api_key_env)
+    api_key = clean_api_key(api_key or os.environ.get(preset.api_key_env))
     if not api_key and client_kwargs.get("sdk_client") is None:
         raise LLMConfigError(f"Missing API key: set {preset.api_key_env}.")
 

@@ -285,3 +285,13 @@ def test_bad_request_surfaces_provider_reason():
     client = OpenAICompatibleClient("m", provider="groq", sdk_client=FakeOpenAI([other]))
     with pytest.raises(LLMRequestError, match="max_tokens too large"):
         client.chat([Message.user("hi")])
+
+
+def test_api_key_is_cleaned(clean_env):
+    from bem_agent.llm.config import clean_api_key
+
+    assert clean_api_key(' "gsk_abc123"\r\n') == "gsk_abc123"
+    assert clean_api_key("  ") is None
+    clean_env.setenv("GROQ_API_KEY", "gsk_abc123\r\n ")
+    client = get_client("groq")
+    assert client._client.api_key == "gsk_abc123"
