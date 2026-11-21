@@ -94,6 +94,9 @@ jobs:
         run: python scripts/update_reference.py --print-only
 
       - name: Simulation and regression tests
+        env:
+          # Optional: add a GROQ_API_KEY repository secret to also run one live LLM test.
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest -m energyplus -v -rP
 
       - name: Upload charts from the simulation tests
