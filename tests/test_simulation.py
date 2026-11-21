@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -160,3 +161,89 @@ def test_parametric_study_hvac_by_wwr():
     for metric in ("peak_cooling_kw", "cooling_capacity_kw"):
         png = plot_study(DB, result.study_id, metric, OUT_ROOT / f"study_{metric}.png")
         assert png.stat().st_size > 1000
+
+
+# ---------- agent and MCP server on real EnergyPlus ----------
+
+
+def test_agent_drives_a_study_with_scripted_llm(tmp_path):
+    from test_agent import ScriptedClient, call, say
+
+    from bem_agent.agent import Agent
+    from bem_agent.tools import ToolContext
+
+    client = ScriptedClient(
+        [
+            call(
+                "run_parametric_study",
+                {
+                    "name": "Agent HVAC study",
+                    "base": {"location": "tampa", "floor_area_m2": 800, "num_floors": 2},
+                    "parameters": {"hvac": ["vav_chiller_boiler", "pthp"]},
+                },
+            ),
+            say("Study done."),
+        ]
+    )
+    ctx = ToolContext(base_dir=tmp_path, max_simulations=4)
+    result = Agent(client, ctx).run("Compare VAV and PTHP for a Tampa office")
+    study = result.steps[0].result
+    print(json.dumps(study, indent=1)[:3000])
+    assert study["completed"] == 2, study
+    assert {r["label"] for r in study["table"]} == {"VAV", "PTHP"}
+    assert all(r["cooling_capacity_kw"] > 0 for r in study["table"])
+    assert ctx.simulations_used == 2
+    # the tool result the model saw is compact
+    tool_msg = client.requests[1]["messages"][-1].content
+    assert len(tool_msg) < 4000
+
+
+def test_mcp_server_runs_a_simulation(tmp_path):
+    import anyio
+    from mcp import Client
+
+    from bem_agent.mcp_server import build_server
+    from bem_agent.tools import ToolContext
+
+    async def scenario():
+        async with Client(build_server(ToolContext(base_dir=tmp_path))) as client:
+            r = await client.call_tool(
+                "run_simulation", {"location": "golden_co", "floor_area_m2": 500, "hvac": "pthp"}
+            )
+            assert not r.is_error, r.content[0].text
+            summary = json.loads(r.content[0].text)
+            assert summary["status"] in ("completed", "completed_with_warnings"), summary
+            chart = await client.call_tool(
+                "make_chart",
+                {"kind": "metric", "run_ids": [summary["run_id"]], "metric": "cooling_capacity_kw"},
+            )
+            assert chart.content[1].type == "image"
+
+    anyio.run(scenario)
+
+
+@pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
+def test_live_groq_agent(tmp_path):
+    """One real question to the default LLM. Runs only when a Groq key is available."""
+    from bem_agent.agent import Agent
+    from bem_agent.llm import get_client
+    from bem_agent.tools import ToolContext
+
+    agent = Agent(
+        get_client("groq"), ToolContext(base_dir=tmp_path, max_simulations=3), max_steps=6
+    )
+    result = agent.run(
+        "Run a sizing simulation for a one-story, 600 m2 office in Chicago with a VAV system. "
+        "What is the installed cooling capacity in kW?"
+    )
+    print(json.dumps(result.to_dict(), indent=1, default=str)[:4000])
+    runs = [s for s in result.steps if s.tool == "run_simulation" and "run_id" in s.result]
+    assert runs, "the model never ran a simulation"
+    capacity = runs[-1].result.get("cooling_capacity_kw")
+    assert capacity
+    numbers = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", result.answer.replace(",", ""))]
+    # the answer must report the simulated capacity (kW or tons), not an invented one
+    assert any(abs(n - c) <= 0.02 * c for n in numbers for c in (capacity, capacity / 3.517)), (
+        capacity,
+        result.answer,
+    )
