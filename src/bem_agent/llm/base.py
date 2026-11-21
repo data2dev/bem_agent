@@ -86,6 +86,25 @@ class RateLimitExceeded(RuntimeError):
     """Raised when the provider keeps rate-limiting after all retries."""
 
 
+class LLMRequestError(RuntimeError):
+    """The provider rejected the request; `message` carries the provider's reason."""
+
+    def __init__(self, provider: str, status: int | None, message: str, code: str | None = None):
+        super().__init__(f"{provider} rejected the request ({status}): {message}")
+        self.provider, self.status, self.code, self.detail = provider, status, code, message
+
+
+class ToolUseFailed(LLMRequestError):
+    """The provider rejected the model's own tool call (e.g. Groq's `tool_use_failed`).
+
+    The agent can recover by telling the model what was wrong and asking again.
+    """
+
+    def __init__(self, provider: str, message: str, failed_generation: str = ""):
+        super().__init__(provider, 400, message, "tool_use_failed")
+        self.failed_generation = failed_generation
+
+
 class LLMClient(ABC):
     """Base class for provider clients.
 

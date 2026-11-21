@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -125,6 +126,32 @@ BUILDING_SCHEMA: dict[str, Any] = {
 }
 
 
+LOCATION_ALIASES = {
+    "washington": "washington_dc",
+    "dc": "washington_dc",
+    "washington_d_c": "washington_dc",
+    "sterling_va": "washington_dc",
+    "sf": "san_francisco",
+    "golden": "golden_co",
+    "golden_colorado": "golden_co",
+    "chicago_il": "chicago",
+    "tampa_fl": "tampa",
+}
+
+
+def normalize_location(value: str) -> str:
+    """'Washington DC' -> 'washington_dc', 'San Francisco, CA' -> 'san_francisco'."""
+    key = re.sub(r"[^a-z]+", "_", value.lower()).strip("_")
+    if key in CITIES:
+        return key
+    if key in LOCATION_ALIASES:
+        return LOCATION_ALIASES[key]
+    for city in CITIES:  # "san_francisco_ca", "chicago_illinois", ...
+        if key.startswith(city + "_"):
+            return city
+    return key
+
+
 def spec_from_args(args: dict[str, Any]) -> BuildingSpec:
     """Turn the flat tool arguments into a validated BuildingSpec."""
     args = dict(args or {})
@@ -132,7 +159,7 @@ def spec_from_args(args: dict[str, Any]) -> BuildingSpec:
     unknown = set(args) - set(BUILDING_SCHEMA["properties"])
     if unknown:
         raise ToolError(f"Unknown building fields: {sorted(unknown)}")
-    location = str(args.get("location", "")).strip().lower()
+    location = normalize_location(str(args.get("location", "")))
     if location not in CITIES:
         # Tools only accept bundled weather files: never paths chosen by the model.
         raise ToolError(f"Unknown location {args.get('location')!r}; choose from {sorted(CITIES)}")
@@ -347,6 +374,8 @@ def _compare_runs(ctx: ToolContext, args: dict) -> dict:
 def _get_timeseries(ctx: ToolContext, args: dict) -> dict:
     run_id = args.get("run_id", "")
     variable = args.get("variable", "Electricity:Facility")
+    if variable not in HOURLY_VARIABLES:
+        raise ToolError(f"variable must be one of {HOURLY_VARIABLES}")
     freq = args.get("freq", "monthly")
     if freq == "hourly":
         raise ToolError(
@@ -557,8 +586,34 @@ TOOLS: list[Tool] = [
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}
 
 
+def relax_schema(schema: Any) -> Any:
+    """Move enums and numeric ranges from the schema into descriptions.
+
+    Some providers (Groq) check the model's tool call against the schema and reject the
+    whole request on a mismatch, e.g. "Washington DC" for an enum that says
+    "washington_dc". Our own validation then never runs and the model gets no useful
+    feedback. With the constraints in the descriptions the model still sees the allowed
+    values, and our validators (pydantic, run_sql, ...) enforce them with clear errors.
+    """
+    if isinstance(schema, list):
+        return [relax_schema(s) for s in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {k: relax_schema(v) for k, v in schema.items() if k not in ("enum", "minimum", "maximum")}
+    notes = []
+    if "enum" in schema:
+        notes.append("one of: " + ", ".join(str(v) for v in schema["enum"]))
+    if "minimum" in schema or "maximum" in schema:
+        notes.append(f"range: {schema.get('minimum', '')}..{schema.get('maximum', '')}")
+    if notes:
+        desc = out.get("description", "")
+        out["description"] = (desc + "; " if desc else "") + "; ".join(notes)
+    return out
+
+
 def tool_specs() -> list[ToolSpec]:
-    return [t.spec() for t in TOOLS]
+    """Tool specs for the LLM, with relaxed schemas (see relax_schema)."""
+    return [ToolSpec(t.name, t.description, relax_schema(t.parameters)) for t in TOOLS]
 
 
 def execute(ctx: ToolContext, name: str, args: dict[str, Any] | None) -> dict[str, Any]:
