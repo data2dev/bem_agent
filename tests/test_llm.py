@@ -254,3 +254,34 @@ def test_config_errors(clean_env):
         get_client("openai", api_key="k")
     with pytest.raises(LLMConfigError, match="BASE_URL"):
         get_client("openai_compatible", model="m", api_key="k")
+
+
+def _bad_request(body):
+    err = _sdk_error(openai.BadRequestError)
+    err.status_code = 400
+    err.body = body
+    err.response = NS(headers={}, text="")
+    return err
+
+
+def test_bad_request_surfaces_provider_reason():
+    from bem_agent.llm import LLMRequestError, ToolUseFailed
+
+    tool_fail = _bad_request(
+        {
+            "message": "Failed to call a function.",
+            "type": "invalid_request_error",
+            "code": "tool_use_failed",
+            "failed_generation": '{"name": "x"}',
+        }
+    )
+    client = OpenAICompatibleClient("m", provider="groq", sdk_client=FakeOpenAI([tool_fail]))
+    with pytest.raises(ToolUseFailed) as info:
+        client.chat([Message.user("hi")], [TOOL])
+    assert info.value.failed_generation == '{"name": "x"}'
+
+    other = _bad_request(None)
+    other.response = NS(headers={}, text='{"error": {"message": "max_tokens too large"}}')
+    client = OpenAICompatibleClient("m", provider="groq", sdk_client=FakeOpenAI([other]))
+    with pytest.raises(LLMRequestError, match="max_tokens too large"):
+        client.chat([Message.user("hi")])

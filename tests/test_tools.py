@@ -22,6 +22,30 @@ def ctx(tmp_path, monkeypatch):
 # ---------- schemas ----------
 
 
+def test_schemas_sent_to_llm_have_no_hard_constraints():
+    """Groq rejects a whole request when a tool call breaks the schema; we validate."""
+    text = json.dumps([t.parameters for t in tool_specs()])
+    assert '"enum"' not in text and '"minimum"' not in text and '"maximum"' not in text
+    run = next(t for t in tool_specs() if t.name == "run_simulation").parameters
+    assert "one of: chicago" in run["properties"]["location"]["description"]
+    assert "range: 0..0.8" in run["properties"]["window_to_wall_ratio"]["description"]
+
+
+@pytest.mark.parametrize(
+    "given, expected",
+    [
+        ("Washington DC", "washington_dc"),
+        ("Washington, D.C.", "washington_dc"),
+        ("San Francisco, CA", "san_francisco"),
+        ("CHICAGO", "chicago"),
+        ("Golden, Colorado", "golden_co"),
+        ("Tampa FL", "tampa"),
+    ],
+)
+def test_location_names(given, expected):
+    assert spec_from_args({"location": given}).location == expected
+
+
 def test_tool_schemas_are_compact_and_valid():
     specs = tool_specs()
     assert len({t.name for t in specs}) == len(specs)
@@ -172,6 +196,8 @@ def test_mcp_server_lists_and_calls_tools(ctx):
             listed = await client.list_tools()
             assert [t.name for t in listed.tools] == [t.name for t in TOOLS]
             assert listed.tools[1].input_schema["required"] == ["location"]
+            # MCP clients validate their own calls, so they keep the strict schema
+            assert "enum" in listed.tools[1].input_schema["properties"]["location"]
 
             options = await client.call_tool("list_options", {})
             assert not options.is_error

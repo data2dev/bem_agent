@@ -21,7 +21,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .llm import LLMClient, Message, RateLimitExceeded, ToolCall, Usage, get_client
+from .llm import (
+    LLMClient,
+    LLMRequestError,
+    Message,
+    RateLimitExceeded,
+    ToolCall,
+    ToolUseFailed,
+    Usage,
+    get_client,
+)
 from .tools import ToolContext, execute, to_text, tool_specs
 
 log = logging.getLogger(__name__)
@@ -45,6 +54,7 @@ and any assumptions or warnings.
 """
 
 CHARS_PER_TOKEN = 3.5
+MAX_REJECTED_TOOL_CALLS = 2  # per question
 TRIMMED_TOOL_CHARS = 300
 
 
@@ -62,6 +72,7 @@ class AgentResult:
     usage: Usage = field(default_factory=Usage)
     llm_calls: int = 0
     stopped_early: bool = False
+    rejected_tool_calls: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +81,7 @@ class AgentResult:
             "usage": {"input": self.usage.input_tokens, "output": self.usage.output_tokens},
             "llm_calls": self.llm_calls,
             "stopped_early": self.stopped_early,
+            "rejected_tool_calls": self.rejected_tool_calls,
         }
 
 
@@ -147,7 +159,17 @@ class Agent:
         result = AgentResult(answer="")
         for _ in range(self.max_steps):
             messages = trim_history(messages, self.max_input_tokens, self._tools_chars)
-            response = self._chat(messages, result, with_tools=True)
+            try:
+                response = self._chat(messages, result, with_tools=True)
+            except ToolUseFailed as exc:
+                # The provider rejected the model's tool call before we saw it (Groq
+                # validates calls against the schema). Say what went wrong and retry.
+                result.rejected_tool_calls += 1
+                if result.rejected_tool_calls > MAX_REJECTED_TOOL_CALLS:
+                    raise
+                self.on_event("rejected", {"reason": exc.detail})
+                messages.append(Message.user(_rejection_hint(exc)))
+                continue
             messages.append(response.as_message())
             if not response.tool_calls:
                 result.answer = response.text.strip()
@@ -195,6 +217,16 @@ class Agent:
         return tool_result
 
 
+def _rejection_hint(exc: ToolUseFailed) -> str:
+    generation = " ".join(exc.failed_generation.split())[:400]
+    return (
+        f"Your last tool call was rejected: {exc.detail}"
+        + (f" You sent: {generation}" if generation else "")
+        + " Call one tool with a single JSON object of arguments that matches its "
+        "parameters exactly, or answer in plain text."
+    )
+
+
 # ---------- CLI ----------
 
 
@@ -210,6 +242,11 @@ def _print_event(kind: str, data: dict[str, Any]) -> None:
             keys = [k for k in ("run_id", "study_id", "status", "chart") if k in r]
             brief = ", ".join(f"{k}={r[k]}" for k in keys) or "ok"
             print(f"    ✓ {brief}", flush=True)
+    elif kind == "rejected":
+        print(
+            f"    ↺ tool call rejected by the provider, retrying: {data['reason'][:200]}",
+            flush=True,
+        )
     elif kind == "thought":
         print(f"  … {data['text'][:300]}", flush=True)
 
@@ -256,6 +293,11 @@ def main(argv: list[str] | None = None) -> int:
             result = agent.run(question, history)
         except RateLimitExceeded as exc:
             print(f"\nRate limit: {exc}. Wait a minute and try again.")
+            return history or []
+        except LLMRequestError as exc:
+            print(f"\nLLM error: {exc}")
+            if isinstance(exc, ToolUseFailed) and exc.failed_generation:
+                print(f"Model output that was rejected: {exc.failed_generation[:1000]}")
             return history or []
         print("\n" + result.answer + "\n")
         u = result.usage

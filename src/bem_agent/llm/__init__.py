@@ -3,11 +3,13 @@
 from .anthropic_client import AnthropicClient
 from .base import (
     LLMClient,
+    LLMRequestError,
     LLMResponse,
     Message,
     RateLimitExceeded,
     ToolCall,
     ToolSpec,
+    ToolUseFailed,
     Usage,
 )
 from .config import PROVIDERS, LLMConfigError, get_client
@@ -18,12 +20,14 @@ __all__ = [
     "AnthropicClient",
     "LLMClient",
     "LLMConfigError",
+    "LLMRequestError",
     "LLMResponse",
     "Message",
     "OpenAICompatibleClient",
     "RateLimitExceeded",
     "ToolCall",
     "ToolSpec",
+    "ToolUseFailed",
     "Usage",
     "get_client",
 ]
