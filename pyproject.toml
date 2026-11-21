@@ -11,9 +11,14 @@ requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.40",
     "matplotlib>=3.8",
+    "mcp>=2.3",
     "openai>=1.40",
     "pydantic>=2.7",
 ]
+
+[project.scripts]
+bem-agent = "bem_agent.agent:main"
+bem-mcp = "bem_agent.mcp_server:main"
 
 [project.optional-dependencies]
 dev = [
