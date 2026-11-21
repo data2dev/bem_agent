@@ -122,3 +122,33 @@ def test_cli_one_shot(ctx, monkeypatch, capsys):
     assert len(transcripts) == 1
     saved = json.loads(transcripts[0].read_text())
     assert saved["provider"] == "scripted" and saved["steps"][0]["tool"] == "list_options"
+
+
+def test_rejected_tool_call_is_retried_with_a_hint(ctx):
+    from bem_agent.llm import ToolUseFailed
+
+    rejected = ToolUseFailed(
+        "groq",
+        "tool call validation failed: parameters for tool run_simulation did not match schema",
+        '{"name": "run_simulation", "arguments": {"location": "Washington DC"}}',
+    )
+
+    class Flaky(ScriptedClient):
+        def _chat(self, messages, tools, *, max_tokens, temperature):
+            self.requests.append({"messages": list(messages), "tools": [t.name for t in tools]})
+            r = self.responses.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+
+    client = Flaky([rejected, call("list_options", {}), say("ok")])
+    events = []
+    result = Agent(client, ctx, on_event=lambda k, d: events.append(k)).run("go")
+    assert result.answer == "ok" and result.rejected_tool_calls == 1
+    hint = client.requests[1]["messages"][-1]
+    assert hint.role == "user" and "rejected" in hint.content and "Washington DC" in hint.content
+    assert events[0] == "rejected"
+
+    always = Flaky([rejected, rejected, rejected])
+    with pytest.raises(ToolUseFailed):
+        Agent(always, ctx).run("go")
