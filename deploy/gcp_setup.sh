@@ -89,6 +89,9 @@ else
   read -rsp "Paste your Groq API key (input hidden), then press Enter: " GROQ_KEY
   echo
   [[ -n "$GROQ_KEY" ]] || { echo "Empty key; aborted."; exit 1; }
+  # Drop terminal escape codes (arrow keys, bracketed paste) and whitespace.
+  GROQ_KEY="$(printf '%s' "$GROQ_KEY" | sed $'s/\x1b\\[[0-9;]*[A-Za-z~]//g' | tr -d '[:space:]"')"
+  [[ "$GROQ_KEY" =~ ^gsk_[A-Za-z0-9]+$ ]] || echo "Warning: key doesn't look like a Groq key (gsk_...)."
   printf '%s' "$GROQ_KEY" | gcloud secrets create "$SECRET" "${P[@]}" \
     --replication-policy=automatic --data-file=-
   unset GROQ_KEY

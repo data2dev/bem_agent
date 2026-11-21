@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,6 +72,23 @@ class LLMConfigError(ValueError):
     pass
 
 
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z~]|\x1b.")
+
+
+def clean_api_key(value: str | None) -> str | None:
+    """Drop characters that ride along when a key is pasted or typed into a terminal.
+
+    Whitespace, quotes and terminal escape codes (an arrow key at a hidden prompt
+    records ESC [ A) make the Authorization header invalid, and some providers then
+    answer with a bare HTTP 400 that doesn't mention the key.
+    """
+    if value is None:
+        return None
+    value = _ANSI_ESCAPE.sub("", value)
+    cleaned = "".join(ch for ch in value if ch.isprintable() and not ch.isspace())
+    return cleaned.strip("\"'") or None
+
+
 def get_client(
     provider: str | None = None,
     model: str | None = None,
@@ -91,7 +109,7 @@ def get_client(
     if not model:
         raise LLMConfigError(f"Provider {name!r} has no default model; set BEM_LLM_MODEL.")
 
-    api_key = api_key or os.environ.get(preset.api_key_env)
+    api_key = clean_api_key(api_key or os.environ.get(preset.api_key_env))
     if not api_key and client_kwargs.get("sdk_client") is None:
         raise LLMConfigError(f"Missing API key: set {preset.api_key_env}.")
 
