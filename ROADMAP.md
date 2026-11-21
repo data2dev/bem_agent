@@ -136,5 +136,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Winter design day without internal gains; insulated slab. Both changed the regression reference on purpose. |
 | 2026-11-20 | Parametric studies vary only whitelisted parameters (max 48 cases) and validate every case up front. Parallel runs via threads; SQLite written from one thread. |
 | 2026-11-20 | Compare HVAC systems on installed capacity and annual energy, not zone peak loads (which are system-independent). |
-
 | 2026-11-21 | One tool registry for both MCP and the agent loop. Tools accept only bundled locations, so the model never chooses file paths. |
