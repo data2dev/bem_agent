@@ -25,6 +25,8 @@ Every run passes through validation before and after the simulation, so the agen
 
 ## Architecture
 
+Full details, diagrams and design decisions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ```
 LLM (Groq gpt-oss-120b by default, or any MCP client)
         │  tool calls
