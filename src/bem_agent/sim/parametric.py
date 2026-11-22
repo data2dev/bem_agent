@@ -296,7 +296,18 @@ def main_effects(
 
 
 def default_workers() -> int:
-    return max(1, min(4, os.cpu_count() or 1))
+    """Parallel EnergyPlus runs: $BEM_MAX_WORKERS, else usable CPUs (max 4).
+
+    os.cpu_count() can report the host's CPUs inside a container, so prefer the CPUs
+    this process may actually use.
+    """
+    if os.environ.get("BEM_MAX_WORKERS"):
+        return max(1, int(os.environ["BEM_MAX_WORKERS"]))
+    try:
+        usable = len(os.sched_getaffinity(0))
+    except AttributeError:  # not available on macOS
+        usable = os.cpu_count() or 1
+    return max(1, min(4, usable))
 
 
 def run_study(
