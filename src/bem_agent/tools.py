@@ -24,6 +24,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from . import storage
 from .llm import ToolSpec
 from .model import (
     CITIES,
@@ -260,8 +261,8 @@ class ToolContext:
     def run_dir(self, run_id: str) -> Path:
         if not run_id or "/" in run_id or "\\" in run_id or run_id.startswith("."):
             raise ToolError(f"Invalid run_id {run_id!r}")
-        path = self.base_dir / run_id
-        if not (path / "run.json").exists():
+        path = storage.find_run_dir(self.base_dir, run_id)
+        if path is None:
             raise ToolError(f"Unknown run_id {run_id!r}")
         return path
 
@@ -292,7 +293,10 @@ def _run_simulation(ctx: ToolContext, args: dict) -> dict:
     run = simulate(spec, base_dir=ctx.base_dir, timeout_s=ctx.timeout_s)
     if run.status == "invalid":  # stopped by pre-run checks: EnergyPlus never ran
         ctx.simulations_used -= 1
-    return run.summary()
+    summary = run.summary()
+    storage.archive_run(run.out_dir)
+    storage.snapshot_db(ctx.db)
+    return summary
 
 
 def _run_study(ctx: ToolContext, args: dict) -> dict:
@@ -310,7 +314,12 @@ def _run_study(ctx: ToolContext, args: dict) -> dict:
     table = [
         {k: v for k, v in row.items() if v is not None and k != "case"} for row in result.table()
     ]
-    return {**result.summary(), "table": table}
+    summary = {**result.summary(), "table": table}
+    for run in result.runs.values():
+        storage.archive_run(run.out_dir)
+    storage.archive_run(ctx.base_dir / "studies" / result.study_id, subdir="studies")
+    storage.snapshot_db(ctx.db)
+    return summary
 
 
 def _get_run_details(ctx: ToolContext, args: dict) -> dict:
@@ -419,6 +428,8 @@ def _make_chart(ctx: ToolContext, args: dict) -> dict:
         path = plot_study(ctx.db, args.get("study_id", ""), args.get("metric", ""), out)
     else:
         raise ToolError("kind must be metric, timeseries or study")
+    storage.archive_file(path, "charts")
+    storage.archive_file(path.with_suffix(".csv"), "charts")
     return {"chart": str(path), "table": str(path.with_suffix(".csv"))}
 
 
