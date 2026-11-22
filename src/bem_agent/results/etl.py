@@ -85,7 +85,7 @@ CHILD_TABLES = ("zone_sizing", "equipment_sizing", "end_uses", "hourly")
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(db_path)
+    con = sqlite3.connect(db_path, timeout=30)  # tool calls can arrive concurrently
     con.executescript(SCHEMA)
     return con
 
