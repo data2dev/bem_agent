@@ -65,8 +65,9 @@ def call(url: str, headers: dict, tool: str, args: dict):
 
 def test_health_check_needs_no_key(live_server):
     url, _ = live_server
-    r = httpx2.get(f"{url}/healthz")
-    assert r.status_code == 200 and r.json() == {"ok": True}
+    for path in ("/health", "/healthz"):
+        r = httpx2.get(f"{url}{path}")
+        assert r.status_code == 200 and r.json() == {"ok": True}
 
 
 @pytest.mark.parametrize(
