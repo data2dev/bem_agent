@@ -140,10 +140,13 @@ class APIKeyAuth:
         self._keys = [(name, key.encode()) for name, key in keys.items()]
 
     def identify(self, headers: dict[str, str]) -> str | None:
-        token = headers.get("x-api-key", "")
-        auth = headers.get("authorization", "")
-        if not token and auth.lower().startswith("bearer "):
-            token = auth[7:].strip()
+        token = headers.get("x-api-key", "").strip()
+        if not token:
+            token = headers.get("authorization", "").strip()
+            scheme, _, rest = token.partition(" ")
+            if rest and scheme.lower() in ("bearer", "token", "apikey", "api-key"):
+                token = rest.strip()  # "Bearer <key>"; a bare key is accepted as is
+        token = token.strip("\"'")
         if not token:
             return None
         candidate = token.encode()
@@ -153,6 +156,22 @@ class APIKeyAuth:
                 match = name
         return match
 
+    @staticmethod
+    def describe(headers: dict[str, str]) -> str:
+        """What a rejected request carried, for the log. Never includes key material."""
+        auth = headers.get("authorization", "")
+        parts = []
+        if auth:
+            first = auth.strip().split(" ", 1)[0]
+            scheme = first if first.lower() in ("bearer", "token", "basic") else "<no scheme>"
+            parts.append(f"authorization: scheme={scheme} length={len(auth)}")
+        if "x-api-key" in headers:
+            parts.append(f"x-api-key: length={len(headers['x-api-key'])}")
+        if not parts:
+            parts.append("no auth headers")
+        names = sorted(h for h in headers if h not in ("authorization", "x-api-key"))
+        return "; ".join(parts) + f"; headers={names}"
+
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -160,10 +179,24 @@ class APIKeyAuth:
         if scope["path"] in HEALTH_PATHS:
             await _json(send, 200, {"ok": True})
             return
+        if scope["path"].startswith("/.well-known/"):
+            # MCP clients probe for OAuth after a 401. Say plainly there is none, so
+            # they fall back to the API key header instead of starting a sign-in.
+            await _json(
+                send,
+                404,
+                {"error": "No OAuth: this server uses API keys (Authorization: Bearer <key>)"},
+            )
+            return
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
         name = self.identify(headers)
         if name is None:
-            log.warning("rejected request without a valid API key from %s", scope.get("client"))
+            log.warning(
+                "rejected %s %s without a valid API key (%s)",
+                scope.get("method"),
+                scope["path"],
+                self.describe(headers),
+            )
             await _json(
                 send,
                 401,

@@ -76,7 +76,7 @@ def test_health_check_needs_no_key(live_server):
         {},
         {"Authorization": "Bearer wrong-key-wrong-key-wrong-key"},
         {"X-API-Key": "a" * 31},
-        {"Authorization": "a" * 32},
+        {"Authorization": "Basic " + "a" * 32},  # a valid key under an unsupported scheme
     ],
 )
 def test_requests_without_a_valid_key_are_rejected(live_server, headers):
@@ -93,6 +93,43 @@ def test_requests_without_a_valid_key_are_rejected(live_server, headers):
     assert r.status_code == 401
     assert "API key" in r.json()["error"]
     assert r.headers["www-authenticate"].startswith("Bearer")
+
+
+def test_oauth_discovery_gets_a_clear_404(live_server):
+    url, _ = live_server
+    for path in (
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/openid-configuration",
+    ):
+        r = httpx2.get(f"{url}{path}")
+        assert r.status_code == 404 and "API keys" in r.json()["error"]
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        {"Authorization": "Bearer " + KEYS["alice"]},
+        {"Authorization": "bearer  " + KEYS["alice"] + " "},
+        {"Authorization": KEYS["alice"]},  # bare key, no scheme
+        {"Authorization": '"' + KEYS["alice"] + '"'},
+        {"X-API-Key": KEYS["alice"]},
+    ],
+)
+def test_accepted_key_formats(header):
+    from bem_agent.mcp_server import APIKeyAuth
+
+    auth = APIKeyAuth(None, KEYS)
+    assert auth.identify({k.lower(): v for k, v in header.items()}) == "alice"
+
+
+def test_rejection_log_never_contains_the_key():
+    from bem_agent.mcp_server import APIKeyAuth
+
+    text = APIKeyAuth.describe({"authorization": "Bearer " + "x" * 40, "user-agent": "grok"})
+    assert "x" * 10 not in text
+    assert "scheme=Bearer" in text and "user-agent" in text
+    assert APIKeyAuth.describe({}).startswith("no auth headers")
 
 
 def test_bearer_and_x_api_key_both_work_and_budgets_are_per_key(live_server):
