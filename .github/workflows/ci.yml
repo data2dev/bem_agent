@@ -22,9 +22,9 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -48,9 +48,9 @@ jobs:
     runs-on: ubuntu-22.04
     needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -113,3 +113,41 @@ jobs:
             /tmp/eplus-smoke/
             runs/ci/
           if-no-files-found: ignore
+
+  docker:
+    name: Docker image (build + smoke test)
+    runs-on: ubuntu-22.04
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package (for the smoke-test client)
+        run: pip install -e .
+
+      - name: Build image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: docker build --secret id=gh_token,env=GH_TOKEN -t bem-mcp:ci .
+
+      - name: Image size
+        run: docker image ls bem-mcp:ci
+
+      - name: Start container
+        run: |
+          KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$KEY"
+          echo "BEM_MCP_KEY=$KEY" >> "$GITHUB_ENV"
+          docker run -d --name bem -p 8080:8080 -e BEM_MCP_KEYS="{\"ci\": \"$KEY\"}" bem-mcp:ci
+          for i in $(seq 1 30); do curl -fs localhost:8080/healthz && break; sleep 1; done
+
+      - name: Smoke test over HTTP (auth, tools, one simulation)
+        run: python scripts/smoke_mcp.py http://localhost:8080
+
+      - name: Container logs
+        if: always()
+        run: docker logs bem 2>&1 | tail -100

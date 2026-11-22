@@ -47,7 +47,7 @@ EnergyPlus  +  results.db (SQLite)
 | Simulation | Geometry, schedules, thermal loads, autosized equipment, parametric batches |
 | Verification and validation | Pre-run input validation, post-run sanity checks, a reference-case regression test |
 | Data | ETL from EnergyPlus SQLite output into a results database; SQL queries across runs; hourly time-series aggregation and plots |
-| Delivery | Docker image with EnergyPlus and the server; GitHub Actions CI running tests and the regression case |
+| Delivery | Docker image with EnergyPlus and the server; CI runs tests, the regression case and an HTTP smoke test of the image; merges to `main` deploy to Cloud Run |
 
 ## Quick start
 
@@ -136,6 +136,39 @@ Claude Desktop config (`claude_desktop_config.json`):
 Guardrails are enforced in code, not left to the model: inputs are validated before
 anything runs, locations are limited to bundled weather files, SQL is read-only, and
 each session has a simulation budget (`BEM_MAX_SIMULATIONS`, default 60).
+
+## Deployment (Cloud Run)
+
+The MCP server runs on Google Cloud Run, built from the [`Dockerfile`](Dockerfile)
+(EnergyPlus included). Every merge to `main` builds the image, pushes it to Artifact
+Registry and deploys it ([`deploy.yml`](.github/workflows/deploy.yml)). GitHub signs in
+through Workload Identity Federation, so no cloud keys are stored anywhere.
+
+- **API keys:** every request needs a key (`Authorization: Bearer <key>` or
+  `X-API-Key: <key>`), one per person or client, kept in Secret Manager. Requests without
+  one get `401` before reaching any tool. Each key has its own simulation budget, and
+  every tool call is logged with the key's name. Manage keys with
+  [`deploy/mcp.sh`](deploy/mcp.sh) (`add`, `remove`, `list`).
+- **Storage:** simulations run on the instance's local disk; finished runs, charts and
+  snapshots of `results.db` are copied to a Cloud Storage bucket, and the database is
+  restored from there when a new instance starts.
+- **Cost guard:** at most one instance, scales to zero when idle, CPU billed only during
+  requests.
+
+Check a deployment end to end (auth, tools, one simulation):
+
+```bash
+BEM_MCP_KEY=<your key> python scripts/smoke_mcp.py https://<service>.run.app
+```
+
+### Connect Grok
+
+At [grok.com/connectors](https://grok.com/connectors): **New Connector → Custom**, then
+
+- URL: `https://<service>.run.app/mcp` (`bash deploy/mcp.sh url` prints it)
+- Header: `Authorization` = `Bearer <your grok-connector key>`
+
+Grok then calls the same tools directly; no other LLM is involved.
 
 ## Choosing the LLM
 

@@ -1,0 +1,81 @@
+name: Deploy
+
+# Build the image, push it to Artifact Registry and deploy the MCP server to Cloud Run.
+# Runs on every merge to main. GitHub signs in to GCP through Workload Identity
+# Federation (no key files); the identifiers come from deploy/gcp.env.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SERVICE: bem-mcp
+
+jobs:
+  deploy:
+    name: Build and deploy to Cloud Run
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Load GCP settings
+        run: grep -E '^GCP_[A-Z_]+=' deploy/gcp.env >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IMAGE="$GCP_AR_REPO/$SERVICE:${GITHUB_SHA::12}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build --secret id=gh_token,env=GH_TOKEN -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        # max-instances 1: one instance owns results.db and caps cost.
+        # Request-based billing: CPU is only billed while a request runs; scales to zero.
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --image "$IMAGE" \
+            --service-account "$GCP_RUNTIME_SA" \
+            --execution-environment gen2 \
+            --cpu 2 --memory 4Gi --timeout 3600 --concurrency 4 \
+            --min-instances 0 --max-instances 1 --port 8080 \
+            --set-secrets BEM_MCP_KEYS=BEM_MCP_KEYS:latest \
+            --set-env-vars BEM_ARCHIVE_DIR=/archive,BEM_MAX_SIMULATIONS=60,BEM_MAX_WORKERS=2 \
+            --clear-volumes --clear-volume-mounts \
+            --add-volume name=archive,type=cloud-storage,bucket="$GCP_BUCKET" \
+            --add-volume-mount volume=archive,mount-path=/archive \
+            --update-labels app=bem-agent,commit="${GITHUB_SHA::12}" \
+            --quiet
+
+      - name: Health check
+        run: |
+          URL="$(gcloud run services describe "$SERVICE" --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" --format='value(status.url)')"
+          echo "MCP endpoint: $URL/mcp" >> "$GITHUB_STEP_SUMMARY"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "$URL/healthz")"
+          echo "Health check: HTTP $code" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" = "403" ]; then
+            echo "::warning::Cloud Run blocks requests before they reach the app. Run once in Cloud Shell: bash deploy/mcp.sh open"
+          elif [ "$code" != "200" ]; then
+            echo "::error::Health check returned HTTP $code"
+            exit 1
+          fi
