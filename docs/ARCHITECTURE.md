@@ -39,30 +39,26 @@ validates inputs before a run and checks outputs after it.
 The same tools are reachable two ways, and neither needs a specific LLM:
 
 ```mermaid
-flowchart LR
-    subgraph Clients["Who drives the tools (the 'brain')"]
-        G["Grok<br/>(grok.com custom connector)"]
-        C["bem-agent CLI<br/>(Groq gpt-oss-120b by default;<br/>Claude, Gemini, OpenAI by config)"]
-        O["Any MCP client"]
-    end
+flowchart TB
+    G["Grok<br/>custom connector"]
+    C["bem-agent CLI<br/>Groq by default"]
+    O["Any MCP client"]
 
-    subgraph Server["bem_agent (no LLM inside)"]
-        MCP["MCP server<br/>API-key auth"]
+    G -- "HTTPS + API key" --> MCP
+    O -- "MCP" --> MCP
+    C -- "in-process" --> T
+
+    subgraph S["bem_agent server (no LLM inside)"]
+        MCP["MCP server<br/>API-key check"]
         T["Tool registry<br/>9 tools"]
         P["Pipeline<br/>validate → build → run → check"]
         R["Results<br/>ETL · SQL · charts"]
+        MCP --> T --> P --> R
     end
 
-    E["EnergyPlus 25.1"]
-    DB[("results.db<br/>SQLite")]
-    B[("Cloud Storage<br/>archive")]
-
-    G -- "HTTPS + Bearer key" --> MCP
-    O -- "MCP (HTTP or stdio)" --> MCP
-    C -- "in-process" --> T
-    MCP --> T --> P --> E
-    P --> R --> DB
-    DB -. snapshot .-> B
+    P --> E["EnergyPlus 25.1"]
+    R --> DB[("results.db")]
+    DB -. snapshots .-> B[("Cloud Storage")]
     P -. finished runs .-> B
 ```
 
@@ -83,32 +79,33 @@ A question asked in Grok, e.g. *"Compare VAV and packaged heat pumps for a 3-sto
 sequenceDiagram
     autonumber
     actor U as User
-    participant G as Grok (LLM)
-    participant A as APIKeyAuth
-    participant M as MCP server
-    participant T as tools.execute
-    participant S as run_study
-    participant E as EnergyPlus ×4
-    participant D as results.db
-    participant B as Bucket
+    participant G as Grok
+    participant S as Server
+    participant E as EnergyPlus
+    participant D as Storage
 
-    U->>G: question (ft², city, options)
-    G->>A: POST /mcp tools/call run_parametric_study<br/>Authorization: Bearer key
-    A->>A: constant-time key check → "grok-connector"
-    A->>M: forward (key name in a context variable)
-    M->>T: execute in a worker thread (per-key budget)
-    T->>T: normalize location, validate every case (pydantic)
-    T->>S: 4 cases (2 HVAC × 2 WWR)
-    par parallel, each in its own folder
-        S->>E: model.idf → energyplus --expandobjects
+    U->>G: question
+    G->>S: run_parametric_study + API key
+    S->>S: check key, validate all 4 cases
+    par 4 runs in parallel
+        S->>E: model.idf
+        E-->>S: results
     end
-    S->>S: post-run checks per case
-    S->>D: ETL each run (one writer thread)
-    T->>B: archive run folders, snapshot results.db
-    T-->>M: compact JSON (study_id, table, best, main effects)
-    M-->>G: tool result
-    G-->>U: answer with numbers from the tool result
+    S->>S: post-run checks
+    S->>D: results.db + archive
+    S-->>G: compact JSON summary
+    G-->>U: answer from tool numbers
 ```
+
+What happens inside **Server** at each step:
+
+| Step | Inside the server |
+|---|---|
+| 2–3 | `APIKeyAuth` checks the key in constant time and records its name (`grok-connector`); the MCP server runs the tool in a worker thread with that key's budget; `tools.execute` normalizes the location and validates every case |
+| 4–5 | `run_study` runs each case in its own folder: `energyplus --expandobjects` |
+| 6 | post-run checks per case (completed, every zone sized, plausible loads) |
+| 7 | ETL of each run into `results.db` from one writer thread; run folders archived and the database snapshotted to the bucket |
+| 8 | the tool returns study ID, case table, best case and main effects as compact JSON |
 
 What the model sees is a compact summary (a few KB at most), not EnergyPlus output.
 The full detail stays in `results.db` and in the run folders, where later tool calls
