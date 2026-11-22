@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 6 built (in review); deploy and connect Grok once merged
-- **Done:** Phases 0-5 merged; first live agent session on Groq. In review: Phase 6 (PR #13): API keys, Cloud Run storage, Docker image (smoke-tested in CI), deploy workflow
-- **Next:** `deploy/mcp.sh init` → merge #13 (deploys) → `deploy/mcp.sh open` → smoke test → add the Grok connector
+- **Phase:** 6 done; next is Phase 7 (demo polish)
+- **Done:** Phases 0-6. MCP server live on Cloud Run (`bem-mcp`, `https://bem-mcp-155789354610.us-east1.run.app/mcp`), API-key protected; Grok connected as a custom connector; Groq agent works from Cloud Shell
+- **Next:** first Grok session through the connector (compare with the Groq answer); then Phase 7
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -112,8 +112,8 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Storage on Cloud Run: runs on local disk; finished runs, studies, charts and `results.db` snapshots (SQLite backup API) archived to the bucket mount; database restored on startup (SQLite can't run on the FUSE mount)
 - [x] CD (`deploy.yml`): on merge to `main`, build → Artifact Registry → Cloud Run (gen2, 2 CPU, 4 GiB, max 1 instance, scale to zero), health check in the job summary
 - [x] `deploy/mcp.sh`: `init` / `add` / `remove` / `list` keys (old secret versions disabled, service restarted), `open`, `url`
-- [ ] You: `bash deploy/mcp.sh init`, merge, `bash deploy/mcp.sh open`, smoke test against the live URL
-- [ ] Connect Grok (custom connector with the `grok-connector` key)
+- [x] Keys created (`grok-connector`), deployed, `open`, smoke test passed against the live URL (real simulation on Cloud Run)
+- [x] Grok connected as a custom connector (`Authorization: Bearer <key>`). Fixes on the way: `/health` instead of `/healthz` (reserved by Cloud Run); `/.well-known/*` answers 404 so clients don't start OAuth; bare keys accepted; rejection logs show header names (they revealed the key had been entered as a header named `Bearer`)
 - [ ] Optional: `GROQ_API_KEY` repository secret for the live LLM test in CI
 - Skipped: Claude connector (decided 2026-11-21)
 
@@ -146,3 +146,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-21 | Demo front end: Grok via a custom MCP connector authenticated with an API key header. Claude connector skipped. No second LLM between Grok and the tools. |
 | 2026-11-22 | Cloud Run access: app-level API keys plus `--no-invoker-iam-check` (Grok can't send Google identity tokens). Max 1 instance owns `results.db`. |
 | 2026-11-22 | Health endpoint is `/health`: Cloud Run reserves paths ending in `z` and returned 404 for `/healthz` on the first deploy. |
+| 2026-11-22 | Grok connected to the live server. Connector header: `Authorization: Bearer <key>` (or `X-API-Key: <key>`). |
