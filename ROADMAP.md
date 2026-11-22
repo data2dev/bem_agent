@@ -6,9 +6,9 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 _Last updated: 2026-11-20_
 
-- **Phase:** 5 done; next is Phase 6
-- **Done:** Phases 0-5 merged; GCP set up (`projectbem`, `us-east1`, values in `deploy/gcp.env`); first live agent session on Groq from Cloud Shell (see README)
-- **Next:** Phase 6 (Dockerfile, CI image build, deploy the MCP server to Cloud Run)
+- **Phase:** 6 built (in review); deploy and connect Grok once merged
+- **Done:** Phases 0-5 merged; first live agent session on Groq. In review: Phase 6 (PR #13): API keys, Cloud Run storage, Docker image (smoke-tested in CI), deploy workflow
+- **Next:** `deploy/mcp.sh init` → merge #13 (deploys) → `deploy/mcp.sh open` → smoke test → add the Grok connector
 - **Where simulations run:**
   - **CI (GitHub Actions):** installs EnergyPlus 25.1.0 and runs simulation tests on every PR.
   - **Claude's sandbox:** can't download EnergyPlus, so Claude writes code and unit tests here and relies on CI for the simulation tests.
@@ -103,14 +103,19 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 - [x] Tests: scripted-LLM agent tests, in-process MCP client tests; in CI the agent runs a real study and the MCP server a real simulation
 - [x] `scripts/install_energyplus.sh` (used by CI; works in Cloud Shell)
 - [x] First live session on Groq (Cloud Shell); example recorded in the README. Answer quality follow-up: the system prompt now asks for % differences and the sizing basis of each system
-- [ ] Optional: connect the Cloud Run MCP server to claude.ai as a custom connector for the live demo
+- [ ] ~~Connect claude.ai as a custom connector~~ (skipped; Grok instead)
 
-### Phase 6: Packaging and CI/CD
-- [ ] Dockerfile: EnergyPlus + `bem_agent`
-- [ ] CI: build the Docker image and run the regression case inside it
-- [ ] CD: on merge to `main`, push the image to GCP Artifact Registry and deploy to Cloud Run
-- [ ] Keep `results.db` off the GCS mount: SQLite needs file locking, which Cloud Storage FUSE doesn't provide. Write the db to local disk and copy it to the bucket after each run (run folders can stay on the mount)
-- [ ] README quick start verified from a clean clone
+### Phase 6: Packaging, deployment, access
+- [x] Dockerfile: EnergyPlus 25.1 (trimmed to what the server uses) + `bem_agent`, non-root; 634 MB
+- [x] CI: build the image and smoke-test it over HTTP (`scripts/smoke_mcp.py`: health, 401 without a key, tools, one simulation)
+- [x] API keys: `BEM_MCP_KEYS` (Secret Manager), one key per person/client, `Bearer` or `X-API-Key`, constant-time compare, per-key simulation budget, tool calls logged by key name, server refuses public HTTP without keys; `/healthz` open
+- [x] Storage on Cloud Run: runs on local disk; finished runs, studies, charts and `results.db` snapshots (SQLite backup API) archived to the bucket mount; database restored on startup (SQLite can't run on the FUSE mount)
+- [x] CD (`deploy.yml`): on merge to `main`, build → Artifact Registry → Cloud Run (gen2, 2 CPU, 4 GiB, max 1 instance, scale to zero), health check in the job summary
+- [x] `deploy/mcp.sh`: `init` / `add` / `remove` / `list` keys (old secret versions disabled, service restarted), `open`, `url`
+- [ ] You: `bash deploy/mcp.sh init`, merge, `bash deploy/mcp.sh open`, smoke test against the live URL
+- [ ] Connect Grok (custom connector with the `grok-connector` key)
+- [ ] Optional: `GROQ_API_KEY` repository secret for the live LLM test in CI
+- Skipped: Claude connector (decided 2026-11-21)
 
 ### Phase 7: Polish
 - [ ] Architecture diagram and sample plots in the README
@@ -138,3 +143,5 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-20 | Compare HVAC systems on installed capacity and annual energy, not zone peak loads (which are system-independent). |
 | 2026-11-21 | One tool registry for both MCP and the agent loop. Tools accept only bundled locations, so the model never chooses file paths. |
 | 2026-11-21 | Groq key in Secret Manager had a terminal escape code from the hidden prompt (bare HTTP 400). Keys are now cleaned in code and in `gcp_setup.sh`; secret version 2 is the clean key. |
+| 2026-11-21 | Demo front end: Grok via a custom MCP connector authenticated with an API key header. Claude connector skipped. No second LLM between Grok and the tools. |
+| 2026-11-22 | Cloud Run access: app-level API keys plus `--no-invoker-iam-check` (Grok can't send Google identity tokens). Max 1 instance owns `results.db`. |
