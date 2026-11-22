@@ -108,7 +108,7 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 ### Phase 6: Packaging, deployment, access
 - [x] Dockerfile: EnergyPlus 25.1 (trimmed to what the server uses) + `bem_agent`, non-root; 634 MB
 - [x] CI: build the image and smoke-test it over HTTP (`scripts/smoke_mcp.py`: health, 401 without a key, tools, one simulation)
-- [x] API keys: `BEM_MCP_KEYS` (Secret Manager), one key per person/client, `Bearer` or `X-API-Key`, constant-time compare, per-key simulation budget, tool calls logged by key name, server refuses public HTTP without keys; `/healthz` open
+- [x] API keys: `BEM_MCP_KEYS` (Secret Manager), one key per person/client, `Bearer` or `X-API-Key`, constant-time compare, per-key simulation budget, tool calls logged by key name, server refuses public HTTP without keys; `/health` open (Cloud Run reserves `/healthz`)
 - [x] Storage on Cloud Run: runs on local disk; finished runs, studies, charts and `results.db` snapshots (SQLite backup API) archived to the bucket mount; database restored on startup (SQLite can't run on the FUSE mount)
 - [x] CD (`deploy.yml`): on merge to `main`, build → Artifact Registry → Cloud Run (gen2, 2 CPU, 4 GiB, max 1 instance, scale to zero), health check in the job summary
 - [x] `deploy/mcp.sh`: `init` / `add` / `remove` / `list` keys (old secret versions disabled, service restarted), `open`, `url`
@@ -145,3 +145,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-21 | Groq key in Secret Manager had a terminal escape code from the hidden prompt (bare HTTP 400). Keys are now cleaned in code and in `gcp_setup.sh`; secret version 2 is the clean key. |
 | 2026-11-21 | Demo front end: Grok via a custom MCP connector authenticated with an API key header. Claude connector skipped. No second LLM between Grok and the tools. |
 | 2026-11-22 | Cloud Run access: app-level API keys plus `--no-invoker-iam-check` (Grok can't send Google identity tokens). Max 1 instance owns `results.db`. |
+| 2026-11-22 | Health endpoint is `/health`: Cloud Run reserves paths ending in `z` and returned 404 for `/healthz` on the first deploy. |

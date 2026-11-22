@@ -29,9 +29,9 @@ def fail(message: str) -> None:
 
 async def check(url: str, key: str, simulate: bool) -> None:
     async with httpx2.AsyncClient(timeout=60) as http:
-        r = await http.get(f"{url}/healthz")
+        r = await http.get(f"{url}/health")
         if r.status_code != 200:
-            fail(f"/healthz returned {r.status_code}")
+            fail(f"/health returned {r.status_code}")
         print("ok   health check")
         r = await http.post(
             f"{url}/mcp",

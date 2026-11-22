@@ -105,7 +105,7 @@ print(json.dumps(d))' "$name" | write_keys
     # without a valid API key (401) before it reaches a tool.
     gcloud run services update "$SERVICE" --region "$REGION" "${P[@]}" --no-invoker-iam-check --quiet >/dev/null
     url="$(gcloud run services describe "$SERVICE" --region "$REGION" "${P[@]}" --format='value(status.url)')"
-    echo "Open. Health check: $(curl -s "$url/healthz")"
+    echo "Open. Health check: $(curl -s "$url/health")"
     echo "Without a key: HTTP $(curl -s -o /dev/null -w '%{http_code}' -X POST "$url/mcp") (expected 401)"
     ;;
   url)
