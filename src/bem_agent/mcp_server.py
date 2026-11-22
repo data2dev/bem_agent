@@ -11,7 +11,8 @@ Over HTTP every request needs an API key, one per person, from BEM_MCP_KEYS (a J
 of name -> key, e.g. from Secret Manager). Send it as `Authorization: Bearer <key>` or
 `X-API-Key: <key>`. Each key gets its own simulation budget and every tool call is
 logged with the key's name. The server refuses to listen on a public interface without
-keys. GET /healthz is open, for health checks.
+keys. GET /health is open, for health checks (not /healthz: Cloud Run reserves paths
+ending in "z" and answers them itself with 404).
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ INSTRUCTIONS = (
 )
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+HEALTH_PATHS = ("/health", "/healthz")  # /healthz never reaches us on Cloud Run
 # Name of the API key behind the current request ("local" for stdio / no-auth).
 current_key: contextvars.ContextVar[str] = contextvars.ContextVar("current_key", default="local")
 
@@ -155,7 +157,7 @@ class APIKeyAuth:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        if scope["path"] == "/healthz":
+        if scope["path"] in HEALTH_PATHS:
             await _json(send, 200, {"ok": True})
             return
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}

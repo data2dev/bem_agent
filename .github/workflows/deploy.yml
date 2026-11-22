@@ -71,7 +71,7 @@ jobs:
           URL="$(gcloud run services describe "$SERVICE" --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" --format='value(status.url)')"
           echo "MCP endpoint: $URL/mcp" >> "$GITHUB_STEP_SUMMARY"
-          code="$(curl -s -o /dev/null -w '%{http_code}' "$URL/healthz")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "$URL/health")"
           echo "Health check: HTTP $code" >> "$GITHUB_STEP_SUMMARY"
           if [ "$code" = "403" ]; then
             echo "::warning::Cloud Run blocks requests before they reach the app. Run once in Cloud Shell: bash deploy/mcp.sh open"
