@@ -143,7 +143,7 @@ jobs:
           echo "::add-mask::$KEY"
           echo "BEM_MCP_KEY=$KEY" >> "$GITHUB_ENV"
           docker run -d --name bem -p 8080:8080 -e BEM_MCP_KEYS="{\"ci\": \"$KEY\"}" bem-mcp:ci
-          for i in $(seq 1 30); do curl -fs localhost:8080/healthz && break; sleep 1; done
+          for i in $(seq 1 30); do curl -fs localhost:8080/health && break; sleep 1; done
 
       - name: Smoke test over HTTP (auth, tools, one simulation)
         run: python scripts/smoke_mcp.py http://localhost:8080
