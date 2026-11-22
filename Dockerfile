@@ -9,7 +9,7 @@
 # ---- stage 1: download EnergyPlus and trim what the server never uses ----
 FROM python:3.12-slim-bookworm AS energyplus
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates libgomp1 libx11-6 \
  && rm -rf /var/lib/apt/lists/*
 ARG ENERGYPLUS_TAG=v25.1.0
 COPY scripts/install_energyplus.sh /tmp/install_energyplus.sh
