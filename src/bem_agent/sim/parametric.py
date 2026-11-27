@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from ..model.building import BuildingSpec
 from ..results.etl import load_run, record_study
+from ..units import describe_difference
 from .pipeline import SimulationRun, results_db_path, runs_dir, simulate
 
 # Parameter path -> short label used in case names and chart labels.
@@ -264,7 +265,54 @@ class StudyResult:
             if any(r.get(m) is not None for r in ok)
         }
         out["main_effects"] = main_effects(self.study, self.cases, ok, metrics)
+        comps = comparisons(self.study, self.cases, ok)
+        if comps:
+            out["comparisons"] = comps
         return out
+
+
+COMPARE_METRICS = (
+    "peak_cooling_kw",
+    "cooling_capacity_kw",
+    "heating_capacity_kw",
+    "site_eui_kwh_m2",
+)
+MAX_COMPARISONS = 24
+
+
+def comparisons(
+    study: ParametricStudy, cases: list[Case], rows: list[dict]
+) -> dict[str, dict[str, str]]:
+    """Each case against the case that differs only in one parameter, set to its first value.
+
+    Differences are computed here, in code, so the LLM can quote them instead of doing
+    arithmetic: {"PTHP / WWR 30% vs VAV / WWR 30%": {"cooling_capacity_kw": "-6.6 kW
+    (-1.9 tons, -4.0%)"}}.
+    """
+    by_case = {r["case"]: r for r in rows}
+    by_overrides = {json.dumps(c.overrides, sort_keys=True, default=str): c for c in cases}
+    out: dict[str, dict[str, str]] = {}
+    for path, values in study.parameters.items():
+        if len(values) < 2:
+            continue
+        for case in cases:
+            if case.overrides[path] == values[0] or case.index not in by_case:
+                continue
+            base_overrides = {**case.overrides, path: values[0]}
+            base = by_overrides.get(json.dumps(base_overrides, sort_keys=True, default=str))
+            if base is None or base.index not in by_case:
+                continue
+            new_row, base_row = by_case[case.index], by_case[base.index]
+            diffs = {
+                m: describe_difference(m, new_row[m], base_row[m])
+                for m in COMPARE_METRICS
+                if new_row.get(m) is not None and base_row.get(m) is not None
+            }
+            if diffs:
+                out[f"{case.label} vs {base.label}"] = diffs
+            if len(out) >= MAX_COMPARISONS:
+                return out
+    return out
 
 
 def main_effects(

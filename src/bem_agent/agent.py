@@ -40,8 +40,12 @@ You are a building energy modeling assistant. You run EnergyPlus through tools.
 
 Rules:
 - Every number you report must come from a tool result; never estimate or invent results.
-- Inputs and results are SI. Convert the user's units (1 ft2 = 0.0929 m2, 1 ton = 3.517 kW, \
-°F = °C*9/5+32) and report in their units too.
+- Do no arithmetic on results. Tool inputs are SI, so convert the user's inputs \
+(1 ft2 = 0.0929 m2), but take every reported number from the tool results: they include \
+US units (_tons for cooling, _kbtuh for heating, _kbtu_ft2 for EUI) and, for studies, \
+ready-made differences in "comparisons". If a number you need is not there, say so.
+- Report cooling in kW and tons, heating in kW and kBtu/h (never tons), EUI in kWh/m2 and \
+kBtu/ft2.
 - Check each run's status and issues before using its numbers. If a run failed or has \
 errors, say so and fix the inputs if you can.
 - Peak zone loads are what the rooms need and do not depend on the HVAC system. To compare \
@@ -49,14 +53,27 @@ HVAC systems use cooling_capacity_kw / heating_capacity_kw, and annual energy (E
 run_period="annual" runs.
 - To compare several options, use one run_parametric_study instead of many single runs.
 - Use few tool calls. Reuse run_ids instead of re-running.
-- Interpret, don't just rank: say how big a difference is (in %), and call differences \
-under about 5% roughly equal. Central plant capacity (chiller, boiler) and the sum of \
-per-zone units (PTHP) are sized differently; mention it when comparing them.
-- Finish with a short answer: the key numbers, the run_id or study_id they came from, \
-and the main assumptions (presets used, sizing-only vs annual) and any warnings.
+- Interpret, don't just rank: quote the difference from "comparisons", and call \
+differences under about 5% roughly equal. Central plant capacity (chiller, boiler) and the \
+sum of per-zone units (PTHP) are sized differently; mention it when comparing them.
+- If a run reports unmet hours above 300, say its energy results are not reliable.
+- Keep the final answer short (under about 200 words): one compact table of the key \
+numbers, two or three sentences of interpretation, the study_id or run_ids, and the main \
+assumptions (presets, sizing-only vs annual) and warnings in one line each.
 """
 
 CHARS_PER_TOKEN = 3.5
+TRUNCATED_NOTE = "[answer cut off at the output token limit]"
+
+
+def _mark_truncated(response) -> str:
+    """The answer text, with a visible note if the provider stopped at max_tokens."""
+    text = response.text.strip()
+    if response.stop_reason in ("length", "max_tokens"):
+        return f"{text}\n\n{TRUNCATED_NOTE}"
+    return text
+
+
 MAX_REJECTED_TOOL_CALLS = 2  # per question
 TRIMMED_TOOL_CHARS = 300
 
@@ -175,7 +192,7 @@ class Agent:
                 continue
             messages.append(response.as_message())
             if not response.tool_calls:
-                result.answer = response.text.strip()
+                result.answer = _mark_truncated(response)
                 self._history = messages
                 return result
             if response.text.strip():
@@ -191,7 +208,7 @@ class Agent:
         )
         messages = trim_history(messages, self.max_input_tokens, 0)
         response = self._chat(messages, result, with_tools=False)
-        result.answer = response.text.strip()
+        result.answer = _mark_truncated(response)
         self._history = messages
         return result
 
