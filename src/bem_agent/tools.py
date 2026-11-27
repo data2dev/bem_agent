@@ -51,6 +51,7 @@ from .results.plots import METRIC_LABELS, plot_metric_comparison, plot_study, pl
 from .sim import ParametricStudy, StudyError, run_study, simulate
 from .sim.parametric import MAX_CASES, PARAMETERS
 from .sim.pipeline import results_db_path, runs_dir
+from .units import with_ip_units
 
 log = logging.getLogger(__name__)
 
@@ -282,7 +283,8 @@ def _list_options(ctx: ToolContext, args: dict) -> dict:
         },
         "study_parameters": list(PARAMETERS),
         "max_study_cases": MAX_CASES,
-        "units": "SI. 1 ft2 = 0.0929 m2; 1 ton = 3.517 kW; 1 kBtu/h = 0.293 kW",
+        "units": "Inputs SI (1 ft2 = 0.0929 m2). Results carry SI and IP fields "
+        "(_tons, _kbtuh, _kbtu_ft2); quote them, do not convert.",
         "simulations_left": ctx.max_simulations - ctx.simulations_used,
     }
 
@@ -293,7 +295,7 @@ def _run_simulation(ctx: ToolContext, args: dict) -> dict:
     run = simulate(spec, base_dir=ctx.base_dir, timeout_s=ctx.timeout_s)
     if run.status == "invalid":  # stopped by pre-run checks: EnergyPlus never ran
         ctx.simulations_used -= 1
-    summary = run.summary()
+    summary = with_ip_units(run.summary())
     storage.archive_run(run.out_dir)
     storage.snapshot_db(ctx.db)
     return summary
@@ -312,7 +314,8 @@ def _run_study(ctx: ToolContext, args: dict) -> dict:
         study, base_dir=ctx.base_dir, max_workers=ctx.max_workers, timeout_s=ctx.timeout_s
     )
     table = [
-        {k: v for k, v in row.items() if v is not None and k != "case"} for row in result.table()
+        with_ip_units({k: v for k, v in row.items() if v is not None and k != "case"})
+        for row in result.table()
     ]
     summary = {**result.summary(), "table": table}
     for run in result.runs.values():
@@ -377,7 +380,7 @@ def _compare_runs(ctx: ToolContext, args: dict) -> dict:
     run_ids = args.get("run_ids") or []
     sort_by = args.get("sort_by")
     rows = compare_runs(ctx.db, run_ids, sort_by=sort_by)
-    return {"runs": [{k: v for k, v in r.items() if v is not None} for r in rows]}
+    return {"runs": [with_ip_units({k: v for k, v in r.items() if v is not None}) for r in rows]}
 
 
 def _get_timeseries(ctx: ToolContext, args: dict) -> dict:

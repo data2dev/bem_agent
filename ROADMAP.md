@@ -4,7 +4,7 @@ This is the working plan for the MVP: what's in scope, the build order, and wher
 
 ## Current status
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-27_
 
 - **Phase:** 6 done; next is Phase 7 (demo polish)
 - **Done:** Phases 0-6. MCP server live on Cloud Run (`bem-mcp`, `https://bem-mcp-155789354610.us-east1.run.app/mcp`), API-key protected; Grok connected as a custom connector; Groq agent works from Cloud Shell
@@ -147,3 +147,4 @@ Context: an AI tool once changed an unrelated GCP project. These rules keep `bem
 | 2026-11-22 | Cloud Run access: app-level API keys plus `--no-invoker-iam-check` (Grok can't send Google identity tokens). Max 1 instance owns `results.db`. |
 | 2026-11-22 | Health endpoint is `/health`: Cloud Run reserves paths ending in `z` and returned 404 for `/healthz` on the first deploy. |
 | 2026-11-22 | Grok connected to the live server. Connector header: `Authorization: Bearer <key>` (or `X-API-Key: <key>`). |
+| 2026-11-27 | No LLM arithmetic on results. Demo recordings showed the model converting units and computing % differences wrongly (kBtu/ft² off ~100×, "−3%" for −4.0%). Tools now return IP units next to SI (`_tons`, `_kbtuh`, `_kbtu_ft2`) and studies return a `comparisons` block; the prompt says to quote, not compute, and asks for short answers. Output stays at 1,500 tokens (Groq 8K TPM counts it with the input); cut-off answers are now marked. Open: annual VAV runs show ~2,800 unmet cooling hours, so annual energy comparisons are not reliable yet. |
